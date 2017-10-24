@@ -28,8 +28,8 @@ def train(env_id, num_timesteps, seed):
             policy = GaussianMlpPolicy(ob_dim, ac_dim)
 
         learn(env, policy=policy, vf=vf,
-            gamma=0.99, lam=0.97, timesteps_per_batch=2500,
-            desired_kl=0.002,
+            gamma=0.99, lam=0.97, timesteps_per_batch=20000,
+            desired_kl=0.01,
             num_timesteps=num_timesteps, animate=False)
 
         env.close()
@@ -39,4 +39,6 @@ if __name__ == "__main__":
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--env', help='environment ID', type=str, default="Reacher-v1")
     args = parser.parse_args()
-    train(args.env, num_timesteps=1e6, seed=args.seed)
+    logger.reset()
+    logger.configure('acktr20000_'+args.env+str(args.seed))
+    train(args.env, num_timesteps=4e6, seed=args.seed)

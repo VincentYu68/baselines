@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # noinspection PyUnresolvedReferences
-import mujoco_py # Mujoco must come before other imports. https://openai.slack.com/archives/C1H6P3R7B/p1492828680631850
+#import mujoco_py # Mujoco must come before other imports. https://openai.slack.com/archives/C1H6P3R7B/p1492828680631850
 from mpi4py import MPI
 from baselines.common import set_global_seeds
 import os.path as osp
@@ -26,13 +26,13 @@ def train(env_id, num_timesteps, seed):
     env = gym.make(env_id)
     def policy_fn(name, ob_space, ac_space):
         return MlpPolicy(name=name, ob_space=env.observation_space, ac_space=env.action_space,
-            hid_size=32, num_hid_layers=2)
+            hid_size=64, num_hid_layers=2)
     env = bench.Monitor(env, logger.get_dir() and 
         osp.join(logger.get_dir(), "%i.monitor.json" % rank))
     env.seed(workerseed)
     gym.logger.setLevel(logging.WARN)
 
-    trpo_mpi.learn(env, policy_fn, timesteps_per_batch=1024, max_kl=0.01, cg_iters=10, cg_damping=0.1,
+    trpo_mpi.learn(env, policy_fn, timesteps_per_batch=20000, max_kl=0.01, cg_iters=10, cg_damping=1e-5,
         max_timesteps=num_timesteps, gamma=0.99, lam=0.98, vf_iters=5, vf_stepsize=1e-3)
     env.close()
 
@@ -42,7 +42,9 @@ def main():
     parser.add_argument('--env', help='environment ID', default='Hopper-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
-    train(args.env, num_timesteps=1e6, seed=args.seed)
+    logger.reset()
+    logger.configure('trpo20000_'+args.env+str(args.seed))
+    train(args.env, num_timesteps=4e6, seed=args.seed)
 
 
 if __name__ == '__main__':

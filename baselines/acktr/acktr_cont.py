@@ -134,6 +134,7 @@ def learn(env, policy, vf, gamma, lam, timesteps_per_batch, num_timesteps,
         logger.record_tabular("EpRewSEM", np.std([path["reward"].sum()/np.sqrt(len(paths)) for path in paths]))
         logger.record_tabular("EpLenMean", np.mean([pathlength(path) for path in paths]))
         logger.record_tabular("KL", kl)
+        logger.record_tabular("Time steps so far", timesteps_so_far)
         if callback:
             callback()
         logger.dump_tabular()

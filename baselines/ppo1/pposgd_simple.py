@@ -7,6 +7,7 @@ from baselines.common.mpi_adam import MpiAdam
 from baselines.common.mpi_moments import mpi_moments
 from mpi4py import MPI
 from collections import deque
+import joblib
 
 def traj_segment_generator(pi, env, horizon, stochastic):
     t = 0
@@ -48,7 +49,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         acs[i] = ac
         prevacs[i] = prevac
 
-        ob, rew, new, _ = env.step(ac)
+        ob, rew, new, envinfo = env.step(ac)
         rews[i] = rew
 
         cur_ep_ret += rew
@@ -60,6 +61,10 @@ def traj_segment_generator(pi, env, horizon, stochastic):
             cur_ep_len = 0
             ob = env.reset()
         t += 1
+
+        if 'broke_sim' in envinfo:
+            if envinfo['broke_sim']:
+                t = 0
 
 def add_vtarg_and_adv(seg, gamma, lam):
     """
@@ -211,6 +216,7 @@ def learn(env, policy_func, *,
         logger.record_tabular("TimeElapsed", time.time() - tstart)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
+            #joblib.dump(pi, logger.get_dir(), compress=True)
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]

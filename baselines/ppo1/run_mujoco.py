@@ -35,7 +35,7 @@ def train(env_id, num_timesteps, seed):
     gym.logger.setLevel(logging.WARN)
     pposgd_simple.learn(env, policy_fn, 
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(4000),
+            timesteps_per_batch=int(5000),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
@@ -57,7 +57,7 @@ def train_mirror(env_id, num_timesteps, seed):
     gym.logger.setLevel(logging.WARN)
     pposgd_mirror.learn(env, policy_fn,
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(4000),
+            timesteps_per_batch=int(5000),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
@@ -78,8 +78,8 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_1energypen_mirror1')
-    train_mirror(args.env, num_timesteps=75000000, seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_03energypen_3d')
+    train(args.env, num_timesteps=75000000, seed=args.seed)
 
 
 if __name__ == '__main__':

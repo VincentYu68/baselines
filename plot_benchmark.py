@@ -20,9 +20,12 @@ if __name__ == '__main__':
     for i in range(len(algnames)):
         all_data.append([])
     for i, algname in enumerate(algnames):
+        guess_names = [algname]
         for sd in range(20):
-            if os.path.exists(algname+str(sd)):
-                with open(algname+str(sd)+'/progress.json') as data_file:
+            guess_names.append(algname+str(sd))
+        for name in guess_names:
+            if os.path.exists(name):
+                with open(name+'/progress.json') as data_file:
                     data = data_file.readlines()
                 all_data[i].append([])
                 for line in data:

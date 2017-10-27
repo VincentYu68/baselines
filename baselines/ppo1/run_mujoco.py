@@ -83,7 +83,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_3energy_vel_bal_mirror')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_4energy_runfast_mirror')
     train_mirror(args.env, num_timesteps=75000000, seed=args.seed)
 
 

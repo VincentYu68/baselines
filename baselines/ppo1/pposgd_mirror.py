@@ -93,7 +93,8 @@ def learn(env, policy_func, *,
         callback=None, # you can do anything in the callback, since it takes locals(), globals()
         adam_epsilon=1e-5,
         schedule='constant', # annealing for stepsize parameters (epsilon and adam)
-        sym_loss_weight = 0.0
+        sym_loss_weight = 0.0,
+        return_threshold = None # termiante learning if reaches return_threshold
         ):
 
     # Setup losses and stuff
@@ -223,6 +224,10 @@ def learn(env, policy_func, *,
         logger.record_tabular("TimeElapsed", time.time() - tstart)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
+
+        if return_threshold is not None:
+            if np.mean(rewbuffer) > return_threshold:
+                break
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]

@@ -85,6 +85,19 @@ class DiagGaussianPdType(PdType):
     def sample_dtype(self):
         return tf.float32
 
+class GaussianMixturePdType(PdType):
+    def __init__(self, size, comp):
+        self.size = size
+        self.comp = comp
+    def pdclass(self):
+        return GaussianMixturePd
+    def param_shape(self):
+        return [2*self.comp*self.size + self.comp]
+    def sample_shape(self):
+        return [self.size]
+    def sample_dtype(self):
+        return tf.float32
+
 class BernoulliPdType(PdType):
     def __init__(self, size):
         self.size = size
@@ -206,6 +219,48 @@ class DiagGaussianPd(Pd):
     def fromflat(cls, flat):
         return cls(flat)
 
+class GaussianMixturePd(Pd):
+    def __init__(self, param):
+        self.flat = param[0]
+        self.comp = param[1]
+        split_shapes=[]
+
+        for i in range(self.comp):
+            split_shapes.append(int(int(self.flat.shape[-1]-self.comp)/self.comp/2))
+            split_shapes.append(int(int(self.flat.shape[-1] - self.comp) / self.comp/2))
+        split_shapes.append(self.comp)
+        split_vals = tf.split(axis=len(self.flat.shape)-1, num_or_size_splits=split_shapes, value=self.flat)
+        self.means = []
+        self.logstds = []
+        self.stds = []
+        for i in range(self.comp):
+            self.means.append(split_vals[i])
+            self.logstds.append(split_vals[self.comp + i])
+            self.stds.append(tf.exp(self.logstds[-1]))
+        self.weights = tf.split(axis=len(split_vals[-1].shape)-1, num_or_size_splits=[1]*self.comp, value=split_vals[-1])
+        self.weights_vec = split_vals[-1]
+    def flatparam(self):
+        return self.flat
+    def mode(self):
+        return tf.convert_to_tensor(self.means)[tf.argmax(self.weights_vec)[0]]
+    def neglogp(self, x):
+        prob = 0
+        for i in range(self.comp):
+            prob += self.weights[i] * (tf.exp(-0.5 * U.sum(tf.square((x - self.means[i]) / self.stds[i]), axis=-1)) / U.sum((tf.sqrt(tf.pow(2.0*np.pi,tf.cast(tf.shape(x)[-1], tf.float32)))*self.stds[i])))
+        return -tf.log(prob)
+
+    def kl(self, other):
+        return 0.0 # don't use KL divergence for GMM models
+    def entropy(self):
+        return 0.0 # not used as well
+    def sample(self):
+        wsamp = tf.multinomial(tf.log(self.weights_vec), 1)
+        id = tf.cast(wsamp[0,:], tf.int32)
+        return tf.convert_to_tensor(self.means)[id[0]] + tf.convert_to_tensor(self.stds)[id[0]] * tf.random_normal(tf.shape(self.means[0]))
+    @classmethod
+    def fromflat(cls, flat):
+        return cls(flat)
+
 class BernoulliPd(Pd):
     def __init__(self, logits):
         self.logits = logits
@@ -227,11 +282,14 @@ class BernoulliPd(Pd):
     def fromflat(cls, flat):
         return cls(flat)
 
-def make_pdtype(ac_space):
+def make_pdtype(ac_space, gmm_comp = 1):
     from gym import spaces
     if isinstance(ac_space, spaces.Box):
         assert len(ac_space.shape) == 1
-        return DiagGaussianPdType(ac_space.shape[0])
+        if gmm_comp == 1:
+            return DiagGaussianPdType(ac_space.shape[0])
+        else:
+            return GaussianMixturePdType(ac_space.shape[0], gmm_comp)
     elif isinstance(ac_space, spaces.Discrete):
         return CategoricalPdType(ac_space.n)
     elif isinstance(ac_space, spaces.MultiDiscrete):

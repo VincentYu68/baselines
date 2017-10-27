@@ -93,17 +93,8 @@ def learn(env, policy_func, *,
         callback=None, # you can do anything in the callback, since it takes locals(), globals()
         adam_epsilon=1e-5,
         schedule='constant', # annealing for stepsize parameters (epsilon and adam)
-        observation_permutation=np.array([]),
-        action_permutation=np.array([]),
         sym_loss_weight = 0.0
         ):
-    # construct permutation matrices
-    obs_perm_mat = np.zeros((len(observation_permutation), len(observation_permutation)))
-    act_per_mat = np.zeros((len(action_permutation), len(action_permutation)))
-    for i, perm in enumerate(observation_permutation):
-        obs_perm_mat[i][int(np.abs(perm))] = np.sign(perm)
-    for i, perm in enumerate(action_permutation):
-        act_per_mat[i][int(np.abs(perm))] = np.sign(perm)
 
     # Setup losses and stuff
     # ----------------------------------------
@@ -120,16 +111,13 @@ def learn(env, policy_func, *,
     ob = U.get_placeholder_cached(name="ob")
     ac = pi.pdtype.sample_placeholder([None])
 
-    mode_ac = pi.pdtype.sample_placeholder([None])
-    mode_mirror_ac = pi.pdtype.sample_placeholder([None])
-
     kloldnew = oldpi.pd.kl(pi.pd)
     ent = pi.pd.entropy()
     meankl = U.mean(kloldnew)
     meanent = U.mean(ent)
     pol_entpen = (-entcoeff) * meanent
 
-    sym_loss = sym_loss_weight * U.mean(tf.square(mode_ac - mode_mirror_ac))    # mirror symmetric loss
+    sym_loss = sym_loss_weight * U.mean(tf.square(pi.mean - pi.mirrored_mean))    # mirror symmetric loss
     ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac)) # pnew / pold
     surr1 = ratio * atarg # surrogate from conservative policy iteration
     surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
@@ -141,12 +129,12 @@ def learn(env, policy_func, *,
     loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent", "sym_loss"]
 
     var_list = pi.get_trainable_variables()
-    lossandgrad = U.function([ob, ac, atarg, ret, lrmult, mode_ac, mode_mirror_ac], losses + [U.flatgrad(total_loss, var_list)])
+    lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(total_loss, var_list)])
     adam = MpiAdam(var_list, epsilon=adam_epsilon)
 
     assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
         for (oldv, newv) in zipsame(oldpi.get_variables(), pi.get_variables())])
-    compute_losses = U.function([ob, ac, atarg, ret, lrmult, mode_ac, mode_mirror_ac], losses)
+    compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
 
     U.initialize()
     adam.sync()
@@ -192,21 +180,7 @@ def learn(env, policy_func, *,
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
 
-        # compute mode action and its mirrored observation's mirrored actions
-        mode_ac = []
-        mode_mirror_ac = []
-        ac_mags=[]
-        for sob in ob:
-            mode_ac.append(pi.act(False, sob)[0])
-            ac_mags.append(np.linalg.norm(mode_ac[-1]))
-            mode_mirror_ac.append(np.dot(act_per_mat, pi.act(False, np.dot(obs_perm_mat,sob))[0]))
-        #print(mode_ac[4], mode_mirror_ac[4])
-        #abc
-        print('Average action magnitude: ', np.mean(ac_mags))
-        mode_ac = np.array(mode_ac)
-        mode_mirror_ac = np.array(mode_mirror_ac)
-
-        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret, mode_ac=mode_ac, mode_mirror_ac=mode_mirror_ac), shuffle=not pi.recurrent)
+        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not pi.recurrent)
         optim_batchsize = optim_batchsize or ob.shape[0]
 
         if hasattr(pi, "ob_rms"): pi.ob_rms.update(ob) # update running mean/std for policy
@@ -218,7 +192,7 @@ def learn(env, policy_func, *,
         for _ in range(optim_epochs):
             losses = [] # list of tuples, each of which gives the loss for a minibatch
             for batch in d.iterate_once(optim_batchsize):
-                *newlosses, g = lossandgrad(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult, batch["mode_ac"], batch["mode_mirror_ac"])
+                *newlosses, g = lossandgrad(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult)
                 adam.update(g, optim_stepsize * cur_lrmult)
                 losses.append(newlosses)
             logger.log(fmt_row(13, np.mean(losses, axis=0)))
@@ -226,7 +200,7 @@ def learn(env, policy_func, *,
         logger.log("Evaluating losses...")
         losses = []
         for batch in d.iterate_once(optim_batchsize):
-            newlosses = compute_losses(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult, batch["mode_ac"], batch["mode_mirror_ac"])
+            newlosses = compute_losses(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult)
             losses.append(newlosses)
         meanlosses,_,_ = mpi_moments(losses, axis=0)
         logger.log(fmt_row(13, meanlosses))

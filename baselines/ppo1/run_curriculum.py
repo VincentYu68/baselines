@@ -15,7 +15,7 @@ from mpi4py import MPI
 
 from baselines.ppo1 import mlp_mirror_policy, pposgd_mirror
 
-def evaluate_policy(env, policy, reps=20):
+def evaluate_policy(env, policy, reps=2):
     avg_return = 0.0
     for i in range(reps):  # average performance over 10 trajectories
         o = env.reset()
@@ -34,18 +34,18 @@ def binary_search_curriculum(env, policy, anchor, direction, threshold, max_step
     else:
         current_max = np.abs(anchor[1] / direction[1])
     bound_point = anchor + direction * current_max
-    env.set_param_values({'anchor_kp':bound_point})
+    env.env.env.anchor_kp=bound_point
     bound_performance = evaluate_policy(env, policy)
     if (bound_performance - threshold) < np.abs(threshold * 0.1) and bound_performance > threshold:
-        return bound_point
+        return bound_point, bound_performance
 
     for i in range(max_step):
         current_step = 0.5 * (current_max + current_min)
         current_point = anchor + current_step * direction
-        env.set_param_values({'anchor_kp': current_point})
+        env.env.env.anchor_kp=current_point
         curr_perf = evaluate_policy(env, policy)
         if (curr_perf - threshold) < np.abs(threshold * 0.1) and curr_perf > threshold:
-            return current_point
+            return current_point, curr_perf
         if curr_perf > threshold:
             current_min = current_step
         if curr_perf < threshold:
@@ -117,7 +117,7 @@ def main():
     progress_threshold = args.prog_thres
 
     env = bench.Monitor(env, logger.get_dir() and
-                        osp.join(logger.get_dir(), "monitor.json"))
+                        osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
     gym.logger.setLevel(logging.WARN)
 
     curriculum_evolution = []
@@ -136,17 +136,20 @@ def main():
 
     previous_params = policy_params
     for iter in range(args.max_iter):
+        print('curriculum iter ', iter)
         opt_pi = pposgd_mirror.learn(env, policy_fn,
-                            max_timesteps=args.batch_size * 200,
-                            timesteps_per_batch=int(args.batch_size),
-                            clip_param=0.2, entcoeff=0.0,
-                            optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
-                            gamma=0.99, lam=0.95, schedule='linear',
-                            callback=callback,
-                            sym_loss_weight=2.0,
-                            return_threshold=reference_anchor_score,
-                            init_policy_params = previous_params,
-                            )
+                                    max_timesteps=args.batch_size * 10,
+                                    timesteps_per_batch=int(args.batch_size),
+                                    clip_param=0.2, entcoeff=0.0,
+                                    optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
+                                    gamma=0.99, lam=0.95, schedule='linear',
+                                    callback=callback,
+                                    sym_loss_weight=2.0,
+                                    return_threshold=reference_anchor_score,
+                                    init_policy_params = previous_params,
+                                    policy_scope='pi'+str(iter),
+                                    )
+        closest_candidate = None
         if MPI.COMM_WORLD.Get_rank() == 0:
             directions = [np.array([-1, 0]), np.array([0, -1]), -current_curriculum / np.linalg.norm(current_curriculum)]
             int_d1 = directions[0] + directions[2]
@@ -154,7 +157,6 @@ def main():
             directions.append(int_d1 / np.linalg.norm(int_d1))
             directions.append(int_d2 / np.linalg.norm(int_d2))
             candidate_next_anchors = []
-            closest_candidate = None
             for direction in directions:
                 found_point, perf = binary_search_curriculum(env, policy, current_curriculum, direction, reference_score, 6)
                 print(direction, found_point, perf)

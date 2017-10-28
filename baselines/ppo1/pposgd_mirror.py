@@ -96,15 +96,21 @@ def learn(env, policy_func, *,
         sym_loss_weight = 0.0,
         return_threshold = None, # termiante learning if reaches return_threshold
         op_after_init = None,
-        init_policy_params = None
+        init_policy_params = None,
+        policy_scope=None
         ):
 
     # Setup losses and stuff
     # ----------------------------------------
     ob_space = env.observation_space
     ac_space = env.action_space
-    pi = policy_func("pi", ob_space, ac_space) # Construct network for new policy
-    oldpi = policy_func("oldpi", ob_space, ac_space) # Network for old policy
+    if policy_scope is None:
+        pi = policy_func("pi", ob_space, ac_space) # Construct network for new policy
+        oldpi = policy_func("oldpi", ob_space, ac_space)  # Network for old policy
+    else:
+        pi = policy_func(policy_scope, ob_space, ac_space)  # Construct network for new policy
+        oldpi = policy_func("old"+policy_scope, ob_space, ac_space)  # Network for old policy
+
     atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
     ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
@@ -142,10 +148,12 @@ def learn(env, policy_func, *,
     U.initialize()
 
     if init_policy_params is not None:
+        cur_scope = pi.get_variables()[0].name[0:pi.get_variables()[0].name.find('/')]
+        orig_scope = list(init_policy_params.keys())[0][0:list(init_policy_params.keys())[0].find('/')]
         for i in range(len(pi.get_variables())):
-            assign_op = pi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name])
+            assign_op = pi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             U.get_session().run(assign_op)
-            assign_op = oldpi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name])
+            assign_op = oldpi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             U.get_session().run(assign_op)
 
     adam.sync()

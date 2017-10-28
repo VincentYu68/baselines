@@ -8,7 +8,7 @@ import numpy as np
 class MlpPolicy(object):
     recurrent = False
     def __init__(self, name, *args, **kwargs):
-        with tf.variable_scope(name, reuse=True):
+        with tf.variable_scope(name):
             self._init(*args, **kwargs)
             self.scope = tf.get_variable_scope().name
 

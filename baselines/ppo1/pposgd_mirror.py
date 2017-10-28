@@ -94,7 +94,9 @@ def learn(env, policy_func, *,
         adam_epsilon=1e-5,
         schedule='constant', # annealing for stepsize parameters (epsilon and adam)
         sym_loss_weight = 0.0,
-        return_threshold = None # termiante learning if reaches return_threshold
+        return_threshold = None, # termiante learning if reaches return_threshold
+        op_after_init = None,
+        init_policy_params = None
         ):
 
     # Setup losses and stuff
@@ -138,6 +140,14 @@ def learn(env, policy_func, *,
     compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
 
     U.initialize()
+
+    if init_policy_params is not None:
+        for i in range(len(pi.get_variables())):
+            assign_op = pi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name])
+            U.get_session().run(assign_op)
+            assign_op = oldpi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name])
+            U.get_session().run(assign_op)
+
     adam.sync()
 
     # Prepare for rollouts
@@ -228,6 +238,7 @@ def learn(env, policy_func, *,
         if return_threshold is not None:
             if np.mean(rewbuffer) > return_threshold:
                 break
+    return pi
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]

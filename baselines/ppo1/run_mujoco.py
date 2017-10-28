@@ -8,6 +8,7 @@ import sys
 import joblib
 import tensorflow as tf
 import numpy as np
+from mpi4py import MPI
 
 def callback(localv, globalv):
     if localv['iters_so_far'] % 10 != 0:
@@ -61,7 +62,7 @@ def train_mirror(env_id, num_timesteps, seed):
                                                      [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
-    env.seed(seed)
+    env.seed(seed+MPI.COMM_WORLD.Get_rank())
     gym.logger.setLevel(logging.WARN)
     pposgd_mirror.learn(env, policy_fn,
             max_timesteps=num_timesteps,

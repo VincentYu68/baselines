@@ -15,7 +15,7 @@ from mpi4py import MPI
 
 from baselines.ppo1 import mlp_mirror_policy, pposgd_mirror
 
-def evaluate_policy(env, policy, reps=2):
+def evaluate_policy(env, policy, reps=20):
     avg_return = 0.0
     for i in range(reps):  # average performance over 10 trajectories
         o = env.reset()
@@ -118,6 +118,7 @@ def main():
 
     env = bench.Monitor(env, logger.get_dir() and
                         osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
+    env.seed(args.seed + MPI.COMM_WORLD.Get_rank())
     gym.logger.setLevel(logging.WARN)
 
     curriculum_evolution = []
@@ -137,8 +138,9 @@ def main():
     previous_params = policy_params
     for iter in range(args.max_iter):
         print('curriculum iter ', iter)
+        print('ref score: ', reference_anchor_score)
         opt_pi = pposgd_mirror.learn(env, policy_fn,
-                                    max_timesteps=args.batch_size * 10,
+                                    max_timesteps=args.batch_size * 200,
                                     timesteps_per_batch=int(args.batch_size),
                                     clip_param=0.2, entcoeff=0.0,
                                     optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
@@ -158,7 +160,7 @@ def main():
             directions.append(int_d2 / np.linalg.norm(int_d2))
             candidate_next_anchors = []
             for direction in directions:
-                found_point, perf = binary_search_curriculum(env, policy, current_curriculum, direction, reference_score, 6)
+                found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, 6)
                 print(direction, found_point, perf)
                 candidate_next_anchors.append(found_point)
                 if closest_candidate is None:

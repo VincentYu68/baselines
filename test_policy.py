@@ -51,9 +51,13 @@ if __name__ == '__main__':
 
         U.initialize()
 
+        cur_scope = policy.get_variables()[0].name[0:policy.get_variables()[0].name.find('/')]
+        orig_scope = list(policy_params.keys())[0][0:list(policy_params.keys())[0].find('/')]
         for i in range(len(policy.get_variables())):
-            assign_op = policy.get_variables()[i].assign(policy_params[policy.get_variables()[i].name])
+            assign_op = policy.get_variables()[i].assign(
+                policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             sess.run(assign_op)
+
     print('===================')
 
     o = env_wrapper.reset()

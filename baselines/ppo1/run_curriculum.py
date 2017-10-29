@@ -66,19 +66,19 @@ def callback(localv, globalv):
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='DartWalker3d-v1')
+    parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartWalker3d-v10_5energy_mirror/policy_params.pkl')
-    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000, 2000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartWalker3d-v10_5energy_mirror/policy_params.pkl')
-    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000, 2000])
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_curriculum_DartHumanWalker-v1_0_0.8_0.5_2500/policy_params.pkl')
+    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[0, 0])
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v13_4energy_vel_bal_mirror/policy_params.pkl')
+    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[6000, 3000])
     parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.8)
     parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.5)
-    parser.add_argument('--batch_size', help='Batch Size', type=int, default=5000)
+    parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
     parser.add_argument('--max_iter', help='Maximum Iteration', type=int, default=2000)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_cont_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -92,12 +92,14 @@ def main():
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, -5, -6, 7, 14, -15, -16, 17, 18, -19, 8,
-                                                      -9, -10, 11, 12, -13, \
-                                                      20, 21, -22, 23, -24, -25, -26, -27, 28, 35, -36, -37, 38, 39,
-                                                      -40, 29, -30, -31, 32, 33, -34, 42, 41]),
+                                                     [0.0001, -1, 2, -3, -4, -11, 12, -13, 14, 15, 16, -5, 6, -7, 8, 9,
+                                                      10, -17, 18, -19, -24, 25, -26, 27, -20, 21, -22, 23,
+                                                      28, 29, -30, 31, -32, -33, -40, 41, -42, 43, 44, 45, -34, 35, -36,
+                                                      37, 38, 39, -46, 47, -48, -53, 54, -55, 56, -49, 50, -51, 52, 58,
+                                                      57]),
                                                  action_permutation=np.array(
-                                                     [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
+                                                     [-6, 7, -8, 9, 10, 11, -0.001, 1, -2, 3, 4, 5, -12, 13, -14, -19,
+                                                      20, -21, 22, -15, 16, -17, 18]))
 
     policy = policy_fn('policy', ob_space, ac_space)
     init_curriculum = np.array(args.init_curriculum)
@@ -107,11 +109,18 @@ def main():
     policy_params = joblib.load(args.init_policy)
     ref_policy_params = joblib.load(args.ref_policy)
     U.initialize()
+    cur_scope = policy.get_variables()[0].name[0:policy.get_variables()[0].name.find('/')]
+    orig_scope = list(policy_params.keys())[0][0:list(policy_params.keys())[0].find('/')]
+    ref_scope = list(ref_policy_params.keys())[0][0:list(ref_policy_params.keys())[0].find('/')]
+    print(cur_scope, orig_scope)
     for i in range(len(policy.get_variables())):
-        assign_op = policy.get_variables()[i].assign(policy_params[policy.get_variables()[i].name.replace('policy', 'pi')])
+        assign_op = policy.get_variables()[i].assign(
+            policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
         sess.run(assign_op)
-        assign_op = ref_policy.get_variables()[i].assign(ref_policy_params[ref_policy.get_variables()[i].name.replace('ref_policy', 'pi')])
+        assign_op = ref_policy.get_variables()[i].assign(
+            ref_policy_params[ref_policy.get_variables()[i].name.replace('ref_'+cur_scope, ref_scope, 1)])
         sess.run(assign_op)
+
 
     anchor_threshold = args.anc_thres
     progress_threshold = args.prog_thres
@@ -151,27 +160,28 @@ def main():
                                     init_policy_params = previous_params,
                                     policy_scope='pi'+str(iter),
                                     )
-        closest_candidate = None
-        if MPI.COMM_WORLD.Get_rank() == 0:
-            directions = [np.array([-1, 0]), np.array([0, -1]), -current_curriculum / np.linalg.norm(current_curriculum)]
-            int_d1 = directions[0] + directions[2]
-            int_d2 = directions[1] + directions[2]
-            directions.append(int_d1 / np.linalg.norm(int_d1))
-            directions.append(int_d2 / np.linalg.norm(int_d2))
-            candidate_next_anchors = []
-            for direction in directions:
-                found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, 6)
-                print(direction, found_point, perf)
-                candidate_next_anchors.append(found_point)
-                if closest_candidate is None:
-                    closest_candidate = np.copy(found_point)
-                elif np.linalg.norm(closest_candidate) > np.linalg.norm(found_point):
-                    closest_candidate = np.copy(found_point)
-            if np.linalg.norm(closest_candidate) < 0.5:
-                closest_candidate = np.array([0, 0])
-        closest_candidate = MPI.COMM_WORLD.bcast(closest_candidate, root=0)
+        if np.linalg.norm(current_curriculum) >= 0.0001:
+            closest_candidate = None
+            if MPI.COMM_WORLD.Get_rank() == 0:
+                directions = [np.array([-1, 0]), np.array([0, -1]), -current_curriculum / np.linalg.norm(current_curriculum)]
+                int_d1 = directions[0] + directions[2]
+                int_d2 = directions[1] + directions[2]
+                directions.append(int_d1 / np.linalg.norm(int_d1))
+                directions.append(int_d2 / np.linalg.norm(int_d2))
+                candidate_next_anchors = []
+                for direction in directions:
+                    found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, 6)
+                    print(direction, found_point, perf)
+                    candidate_next_anchors.append(found_point)
+                    if closest_candidate is None:
+                        closest_candidate = np.copy(found_point)
+                    elif np.linalg.norm(closest_candidate) > np.linalg.norm(found_point):
+                        closest_candidate = np.copy(found_point)
+                if np.linalg.norm(closest_candidate) < 0.5:
+                    closest_candidate = np.array([0, 0])
+            closest_candidate = MPI.COMM_WORLD.bcast(closest_candidate, root=0)
 
-        current_curriculum = np.copy(closest_candidate)
+            current_curriculum = np.copy(closest_candidate)
         env.env.env.anchor_kp = current_curriculum
         curriculum_evolution.append(closest_candidate)
         print('Current curriculum: ', closest_candidate)
@@ -180,8 +190,11 @@ def main():
         for i in range(len(opt_variable)):
             cur_val = opt_variable[i].eval()
             previous_params[opt_variable[i].name] = cur_val
-        if np.linalg.norm(current_curriculum) < 0.0001 and perf > ref_score:
-            break
+        if np.linalg.norm(current_curriculum) < 0.0001:
+            if reference_anchor_score < ref_score:
+                reference_anchor_score = ref_score
+            else:
+                break
 
     env.close()
 

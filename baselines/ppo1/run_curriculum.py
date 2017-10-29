@@ -183,8 +183,8 @@ def main():
 
             current_curriculum = np.copy(closest_candidate)
         env.env.env.anchor_kp = current_curriculum
-        curriculum_evolution.append(closest_candidate)
-        print('Current curriculum: ', closest_candidate)
+        curriculum_evolution.append(current_curriculum)
+        print('Current curriculum: ', current_curriculum)
         opt_variable = opt_pi.get_variables()
         previous_params = {}
         for i in range(len(opt_variable)):

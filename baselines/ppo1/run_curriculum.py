@@ -15,19 +15,35 @@ from mpi4py import MPI
 
 from baselines.ppo1 import mlp_mirror_policy, pposgd_mirror
 
-def evaluate_policy(env, policy, reps=20):
+def gen_reftraj(env, policy, min_len):
+    com_traj = []
+    while len(com_traj) < min_len:
+        com_traj = []
+        o = env.reset()
+        while True:
+            o, rew, done, info = env.step(policy.act(False, o)[0])
+            com_traj.append(info['com'])
+            if done:
+                break
+    return com_traj
+
+def evaluate_policy(env, policy, reps=10):
     avg_return = 0.0
+    max_return = 0.0
     for i in range(reps):  # average performance over 10 trajectories
         o = env.reset()
+        ep_rew = 0.0
         while True:
             o, rew, done, _ = env.step(policy.act(True, o)[0])
             avg_return += rew
+            ep_rew += rew
             if done:
                 break
-    return avg_return / reps
+        max_return = np.max([ep_rew, max_return])
+    return avg_return / reps, max_return
 
 
-def binary_search_curriculum(env, policy, anchor, direction, threshold, max_step):
+def binary_search_curriculum(env, policy, anchor, direction, threshold, max_threshold, max_step):
     current_min = 0.0
     if anchor[0] / np.linalg.norm(anchor) < np.abs(direction[0]):
         current_max = np.abs(anchor[0] / direction[0])
@@ -35,16 +51,16 @@ def binary_search_curriculum(env, policy, anchor, direction, threshold, max_step
         current_max = np.abs(anchor[1] / direction[1])
     bound_point = anchor + direction * current_max
     env.env.env.anchor_kp=bound_point
-    bound_performance = evaluate_policy(env, policy)
-    if (bound_performance - threshold) < np.abs(threshold * 0.1) and bound_performance > threshold:
+    bound_performance, bound_max = evaluate_policy(env, policy)
+    if (bound_performance - threshold) < np.abs(threshold * 0.1) and bound_performance > threshold and bound_max > max_threshold:
         return bound_point, bound_performance
 
     for i in range(max_step):
         current_step = 0.5 * (current_max + current_min)
         current_point = anchor + current_step * direction
         env.env.env.anchor_kp=current_point
-        curr_perf = evaluate_policy(env, policy)
-        if (curr_perf - threshold) < np.abs(threshold * 0.1) and curr_perf > threshold:
+        curr_perf, max_perf = evaluate_policy(env, policy)
+        if (curr_perf - threshold) < np.abs(threshold * 0.1) and curr_perf > threshold and max_perf > max_threshold:
             return current_point, curr_perf
         if curr_perf > threshold:
             current_min = current_step
@@ -68,17 +84,18 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_curriculum_DartHumanWalker-v1_0_0.8_0.5_2500/policy_params.pkl')
-    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[0, 0])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v13_4energy_vel_bal_mirror/policy_params.pkl')
-    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[6000, 3000])
-    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.8)
-    parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.5)
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v1124_energy25_vel4_kd1300_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd1000/policy_params.pkl')
+    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000, 2000])
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v1124_energy25_vel4_kd1300_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd1000/policy_params.pkl')
+    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[0, 1200])
+    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
+    parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.7)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
     parser.add_argument('--max_iter', help='Maximum Iteration', type=int, default=2000)
+    parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_cont_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_200eachit_maxthre_vel4_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_fromsd124energy25_dcontrolconstraint1_damp2'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -96,7 +113,7 @@ def main():
                                                       10, -17, 18, -19, -24, 25, -26, 27, -20, 21, -22, 23,
                                                       28, 29, -30, 31, -32, -33, -40, 41, -42, 43, 44, 45, -34, 35, -36,
                                                       37, 38, 39, -46, 47, -48, -53, 54, -55, 56, -49, 50, -51, 52, 58,
-                                                      57]),
+                                                      57, 59]),
                                                  action_permutation=np.array(
                                                      [-6, 7, -8, 9, 10, 11, -0.001, 1, -2, 3, 4, 5, -12, 13, -14, -19,
                                                       20, -21, 22, -15, 16, -17, 18]))
@@ -112,7 +129,6 @@ def main():
     cur_scope = policy.get_variables()[0].name[0:policy.get_variables()[0].name.find('/')]
     orig_scope = list(policy_params.keys())[0][0:list(policy_params.keys())[0].find('/')]
     ref_scope = list(ref_policy_params.keys())[0][0:list(ref_policy_params.keys())[0].find('/')]
-    print(cur_scope, orig_scope)
     for i in range(len(policy.get_variables())):
         assign_op = policy.get_variables()[i].assign(
             policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
@@ -134,22 +150,31 @@ def main():
 
     env.env.env.anchor_kp = ref_curriculum
     ref_score = None
+    ref_max_score = None
+    reference_trajectory = None
     if MPI.COMM_WORLD.Get_rank() == 0:
-        ref_score = evaluate_policy(env, ref_policy, 20)
+        if args.use_reftraj == 1:
+            reference_trajecotry = gen_reftraj(env, ref_policy, 299)
+            env.env.reference_trajectory = reference_trajectory
+        ref_score, ref_max_score = evaluate_policy(env, ref_policy, 20)
     ref_score=MPI.COMM_WORLD.bcast(ref_score, root = 0)
+    ref_max_score = MPI.COMM_WORLD.bcast(ref_max_score, root = 0)
     reference_score = ref_score * progress_threshold
     reference_anchor_score = ref_score * anchor_threshold
+    reference_max_score = ref_max_score * 0.9
     env.env.env.anchor_kp = init_curriculum
+    reference_trajectory=MPI.COMM_WORLD.bcast(reference_trajectory, root = 0)
+    env.env.reference_trajectory = reference_trajectory
 
     current_curriculum = np.copy(init_curriculum)
-    print('reference scores: ', reference_score, reference_anchor_score)
+    print('reference scores: ', reference_score, reference_anchor_score, reference_max_score)
 
     previous_params = policy_params
     for iter in range(args.max_iter):
         print('curriculum iter ', iter)
         print('ref score: ', reference_anchor_score)
         opt_pi = pposgd_mirror.learn(env, policy_fn,
-                                    max_timesteps=args.batch_size * 200,
+                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 200,
                                     timesteps_per_batch=int(args.batch_size),
                                     clip_param=0.2, entcoeff=0.0,
                                     optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
@@ -159,8 +184,17 @@ def main():
                                     return_threshold=reference_anchor_score,
                                     init_policy_params = previous_params,
                                     policy_scope='pi'+str(iter),
+                                    #max_threshold = reference_max_score,
                                     )
+        print('one learning iteration done')
         if np.linalg.norm(current_curriculum) >= 0.0001:
+            # re-compute reference trajectory
+            if MPI.COMM_WORLD.Get_rank() == 0 and args.use_reftraj == 1:
+                print('recompute reference traj')
+                reference_trajecotry = gen_reftraj(env, opt_pi, 299)
+            reference_trajectory=MPI.COMM_WORLD.bcast(reference_trajectory, root = 0)
+            env.env.reference_trajectory = reference_trajectory
+
             closest_candidate = None
             if MPI.COMM_WORLD.Get_rank() == 0:
                 directions = [np.array([-1, 0]), np.array([0, -1]), -current_curriculum / np.linalg.norm(current_curriculum)]
@@ -170,7 +204,7 @@ def main():
                 directions.append(int_d2 / np.linalg.norm(int_d2))
                 candidate_next_anchors = []
                 for direction in directions:
-                    found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, 6)
+                    found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, reference_max_score, 6)
                     print(direction, found_point, perf)
                     candidate_next_anchors.append(found_point)
                     if closest_candidate is None:
@@ -183,6 +217,7 @@ def main():
 
             current_curriculum = np.copy(closest_candidate)
         env.env.env.anchor_kp = current_curriculum
+
         curriculum_evolution.append(current_curriculum)
         print('Current curriculum: ', current_curriculum)
         opt_variable = opt_pi.get_variables()

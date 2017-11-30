@@ -22,6 +22,8 @@ def traj_segment_generator(pi, env, horizon, stochastic):
     # Initialize history arrays
     obs = np.array([ob for _ in range(horizon)])
     rews = np.zeros(horizon, 'float32')
+    pos_rews = np.zeros(horizon, 'float32')
+    neg_pens = np.zeros(horizon, 'float32')
     vpreds = np.zeros(horizon, 'float32')
     news = np.zeros(horizon, 'int32')
     acs = np.array([ac for _ in range(horizon)])
@@ -36,7 +38,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         if t > 0 and t % horizon == 0:
             yield {"ob" : obs, "rew" : rews, "vpred" : vpreds, "new" : news,
                     "ac" : acs, "prevac" : prevacs, "nextvpred": vpred * (1 - new),
-                    "ep_rets" : ep_rets, "ep_lens" : ep_lens}
+                    "ep_rets" : ep_rets, "ep_lens" : ep_lens, "pos_rews" : pos_rews, "neg_pens": neg_pens}
             # Be careful!!! if you change the downstream algorithm to aggregate
             # several of these batches, then be sure to do a deepcopy
             ep_rets = []
@@ -49,6 +51,10 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         prevacs[i] = prevac
 
         ob, rew, new, envinfo = env.step(ac)
+        if "pos_rew" in envinfo:
+            pos_rews[i] = envinfo["pos_rew"]
+        if "neg_pen" in envinfo:
+            neg_pens[i] = envinfo["neg_pen"]
         rews[i] = rew
 
         cur_ep_ret += rew
@@ -97,7 +103,9 @@ def learn(env, policy_func, *,
         return_threshold = None, # termiante learning if reaches return_threshold
         op_after_init = None,
         init_policy_params = None,
-        policy_scope=None
+        policy_scope=None,
+        max_threshold=None,
+        positive_rew_enforce = True
         ):
 
     # Setup losses and stuff
@@ -171,6 +179,8 @@ def learn(env, policy_func, *,
 
     assert sum([max_iters>0, max_timesteps>0, max_episodes>0, max_seconds>0])==1, "Only one time constraint permitted"
 
+    max_thres_satisfied = max_threshold is None
+    adjust_ratio = 0.0
     while True:
         if callback: callback(locals(), globals())
         if max_timesteps and timesteps_so_far >= max_timesteps:
@@ -192,13 +202,26 @@ def learn(env, policy_func, *,
         logger.log("********** Iteration %i ************"%iters_so_far)
 
         seg = seg_gen.__next__()
+        if positive_rew_enforce:
+            rewlocal = (seg["pos_rews"], seg["neg_pens"], seg["rew"])  # local values
+            listofrews = MPI.COMM_WORLD.allgather(rewlocal)  # list of tuples
+            pos_rews, neg_pens, rews = map(flatten_lists, zip(*listofrews))
+            if np.mean(rews) < 0.0:
+                #min_id = np.argmin(rews)
+                #adjust_ratio = pos_rews[min_id]/np.abs(neg_pens[min_id])
+                adjust_ratio = np.max([adjust_ratio, np.mean(pos_rews) / np.abs(np.mean(neg_pens))])
+                for i in range(len(seg["rew"])):
+                    if np.abs(seg["rew"][i] - seg["pos_rews"][i] - seg["neg_pens"][i]) > 1e-5:
+                        print(seg["rew"][i], seg["pos_rews"][i] , seg["neg_pens"][i])
+                        print('Reward wrong!')
+                        abc
+                    seg["rew"][i] = seg["pos_rews"][i] + seg["neg_pens"][i] * adjust_ratio
         add_vtarg_and_adv(seg, gamma, lam)
 
         # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))
         ob, ac, atarg, tdlamret = seg["ob"], seg["ac"], seg["adv"], seg["tdlamret"]
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
-
         d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not pi.recurrent)
         optim_batchsize = optim_batchsize or ob.shape[0]
 
@@ -215,7 +238,6 @@ def learn(env, policy_func, *,
                 adam.update(g, optim_stepsize * cur_lrmult)
                 losses.append(newlosses)
             logger.log(fmt_row(13, np.mean(losses, axis=0)))
-
         logger.log("Evaluating losses...")
         losses = []
         for batch in d.iterate_once(optim_batchsize):
@@ -240,12 +262,20 @@ def learn(env, policy_func, *,
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
         logger.record_tabular("TimestepsSoFar", timesteps_so_far)
         logger.record_tabular("TimeElapsed", time.time() - tstart)
+        if positive_rew_enforce:
+            if adjust_ratio is not None:
+                logger.record_tabular("RewardAdjustRatio", adjust_ratio)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
-
-        if return_threshold is not None:
+        if return_threshold is not None and max_thres_satisfied:
             if np.mean(rewbuffer) > return_threshold:
                 break
+        if max_threshold is not None:
+            print('Current max return: ', np.max(rewbuffer))
+            if np.max(rewbuffer) > max_threshold:
+                max_thres_satisfied = True
+            else:
+                max_thres_satisfied = False
     return pi
 
 def flatten_lists(listoflists):

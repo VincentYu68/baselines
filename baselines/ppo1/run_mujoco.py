@@ -53,25 +53,24 @@ def train_mirror(env_id, num_timesteps, seed):
         return mlp_mirror_policy.MlpMirrorPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
-                                                 observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, -5, -6, 7, 14, -15, -16, 17, 18, -19, 8,
-                                                      -9, -10, 11, 12, -13, \
-                                                      20, 21, -22, 23, -24, -25, -26, -27, 28, 35, -36, -37, 38, 39,
-                                                      -40, 29, -30, -31, 32, 33, -34, 42, 41]),
-                                                 action_permutation=np.array(
-                                                     [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
+                                                 observation_permutation=np.array([0.0001,-1,2,-3,-4, -11,12,-13,14,15,16, -5,6,-7,8,9,10, -17,18, -19, -24,25,-26,27, -20,21,-22,23,\
+                                          28,29,-30,31,-32,-33, -40,41,-42,43,44,45, -34,35,-36,37,38,39, -46,47, -48, -53,54,-55,56, -49,50,-51,52, 58,57, 59]),
+        action_permutation=np.array([-6,7,-8, 9, 10,11,  -0.001,1,-2, 3, 4,5, -12,13, -14, -19,20,-21,22, -15,16,-17,18]))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
     env.seed(seed+MPI.COMM_WORLD.Get_rank())
     gym.logger.setLevel(logging.WARN)
     pposgd_mirror.learn(env, policy_fn,
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(5000),
+            timesteps_per_batch=int(2500),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
             callback=callback,
-            sym_loss_weight=2.0
+            sym_loss_weight=2.0,
+            positive_rew_enforce=False,
+            #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1117_energy25_bal_vel1_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2/policy_params.pkl')
+            #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1124_energy25_vel3_kd1000_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd500/policy_params.pkl')
         )
     env.close()
 
@@ -82,8 +81,9 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_5energy_mirror')
-    train_mirror(args.env, num_timesteps=int(5000*4*350), seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy25_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2knee_leg100')
+    #logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy05_bal_vel4smooth_mirror_up1fwd01ltl1_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcontrolconstraint1_strongerarm_asinput_treadmill')
+    train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 
 if __name__ == '__main__':

@@ -58,6 +58,11 @@ if __name__ == '__main__':
                 policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             sess.run(assign_op)
 
+        if 'curriculum' in sys.argv[2] and 'policy_params.pkl' in sys.argv[2]:
+            init_qs, init_dqs = joblib.load(sys.argv[2].replace('policy_params.pkl', 'init_poses.pkl'))
+            env.env.init_qs = init_qs
+            env.env.init_dqs = init_dqs
+
     print('===================')
 
     o = env_wrapper.reset()
@@ -79,7 +84,7 @@ if __name__ == '__main__':
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(True, o)
+            ac, vpred = policy.act(False, o)
             act = ac
         else:
             act = env.action_space.sample()
@@ -105,6 +110,11 @@ if __name__ == '__main__':
         if len(o) > 25:
             x_vel.append(env.env.robot_skeleton.dq[0])
 
+        if len(foot_contacts) > 400:
+            if np.random.random() < 0.03:
+                print('q ', np.array2string(env.env.robot_skeleton.q, separator=','))
+                print('dq ', np.array2string(env.env.robot_skeleton.dq, separator=','))
+
         if d:
             ct += 1
             print('reward: ', rew)
@@ -120,8 +130,10 @@ if __name__ == '__main__':
                 plt.plot(np.array(actions)[:, i])
     if sys.argv[1] == 'DartHumanWalker-v1':
         rendergroup = [[0,1,2, 6,7,8], [3,9], [4,5,10,11], [12,13,14]]
-        for rg in rendergroup:
+        titles = ['thigh', 'knee', 'foot', 'waist']
+        for i,rg in enumerate(rendergroup):
             plt.figure()
+            plt.title(titles[i])
             for i in rg:
                 plt.plot(np.array(actions)[:, i])
     plt.figure()

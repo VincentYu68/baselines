@@ -105,7 +105,9 @@ def learn(env, policy_func, *,
         init_policy_params = None,
         policy_scope=None,
         max_threshold=None,
-        positive_rew_enforce = True
+        positive_rew_enforce = False,
+        reward_drop_bound = None,
+        min_iters = 0
         ):
 
     # Setup losses and stuff
@@ -181,6 +183,13 @@ def learn(env, policy_func, *,
 
     max_thres_satisfied = max_threshold is None
     adjust_ratio = 0.0
+    prev_avg_rew = -1000000
+    revert_parameters = {}
+    variables = pi.get_variables()
+    for i in range(len(variables)):
+        cur_val = variables[i].eval()
+        revert_parameters[variables[i].name] = cur_val
+    revert_data = [0, 0, 0]
     while True:
         if callback: callback(locals(), globals())
         if max_timesteps and timesteps_so_far >= max_timesteps:
@@ -202,6 +211,38 @@ def learn(env, policy_func, *,
         logger.log("********** Iteration %i ************"%iters_so_far)
 
         seg = seg_gen.__next__()
+
+        if reward_drop_bound is not None:
+            lrlocal = (seg["ep_lens"], seg["ep_rets"])  # local values
+            listoflrpairs = MPI.COMM_WORLD.allgather(lrlocal)  # list of tuples
+            lens, rews = map(flatten_lists, zip(*listoflrpairs))
+            lenbuffer.extend(lens)
+            rewbuffer.extend(rews)
+            revert_iteration = False
+            if np.mean(
+                    rewbuffer) < prev_avg_rew - 50:  # detect significant drop in performance, revert to previous iteration
+                print("Revert Iteration!!!!!")
+                revert_iteration = True
+            else:
+                prev_avg_rew = np.mean(rewbuffer)
+            logger.record_tabular("Revert Rew", prev_avg_rew)
+            if revert_iteration:  # revert iteration
+                for i in range(len(pi.get_variables())):
+                    assign_op = pi.get_variables()[i].assign(revert_parameters[pi.get_variables()[i].name])
+                    U.get_session().run(assign_op)
+                episodes_so_far = revert_data[0]
+                timesteps_so_far = revert_data[1]
+                iters_so_far = revert_data[2]
+                continue
+            else:
+                variables = pi.get_variables()
+                for i in range(len(variables)):
+                    cur_val = variables[i].eval()
+                    revert_parameters[variables[i].name] = np.copy(cur_val)
+                revert_data[0] = episodes_so_far
+                revert_data[1] = timesteps_so_far
+                revert_data[2] = iters_so_far
+
         if positive_rew_enforce:
             rewlocal = (seg["pos_rews"], seg["neg_pens"], seg["rew"])  # local values
             listofrews = MPI.COMM_WORLD.allgather(rewlocal)  # list of tuples
@@ -251,8 +292,9 @@ def learn(env, policy_func, *,
         lrlocal = (seg["ep_lens"], seg["ep_rets"]) # local values
         listoflrpairs = MPI.COMM_WORLD.allgather(lrlocal) # list of tuples
         lens, rews = map(flatten_lists, zip(*listoflrpairs))
-        lenbuffer.extend(lens)
-        rewbuffer.extend(rews)
+        if reward_drop_bound is None:
+            lenbuffer.extend(lens)
+            rewbuffer.extend(rews)
         logger.record_tabular("EpLenMean", np.mean(lenbuffer))
         logger.record_tabular("EpRewMean", np.mean(rewbuffer))
         logger.record_tabular("EpThisIter", len(lens))
@@ -262,13 +304,14 @@ def learn(env, policy_func, *,
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
         logger.record_tabular("TimestepsSoFar", timesteps_so_far)
         logger.record_tabular("TimeElapsed", time.time() - tstart)
+        logger.record_tabular("Iter", iters_so_far)
         if positive_rew_enforce:
             if adjust_ratio is not None:
                 logger.record_tabular("RewardAdjustRatio", adjust_ratio)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
         if return_threshold is not None and max_thres_satisfied:
-            if np.mean(rewbuffer) > return_threshold:
+            if np.mean(rewbuffer) > return_threshold and iters_so_far > min_iters:
                 break
         if max_threshold is not None:
             print('Current max return: ', np.max(rewbuffer))

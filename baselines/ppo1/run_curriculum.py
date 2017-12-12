@@ -15,6 +15,23 @@ from mpi4py import MPI
 
 from baselines.ppo1 import mlp_mirror_policy, pposgd_mirror
 
+def update_init_poses(env, policy):
+    o = env.reset()
+    collected_qs = []
+    collected_dqs = []
+    step = 0
+    while True:
+        o, rew, done, info = env.step(policy.act(False, o)[0])
+        if np.abs(info['vel_rew']) < 0.5 and step > 100:
+            collected_qs.append(env.env.env.robot_skeleton.q)
+            collected_dqs.append(env.env.env.robot_skeleton.dq)
+        if done:
+            break
+        step += 1
+    env.env.env.init_qs = collected_qs
+    env.env.env.init_dqs = collected_dqs
+    print('Collected init poses ', len(collected_dqs))
+
 def gen_reftraj(env, policy, min_len):
     com_traj = []
     while len(com_traj) < min_len:
@@ -42,13 +59,15 @@ def evaluate_policy(env, policy, reps=10):
         max_return = np.max([ep_rew, max_return])
     return avg_return / reps, max_return
 
-
 def binary_search_curriculum(env, policy, anchor, direction, threshold, max_threshold, max_step):
     current_min = 0.0
-    if anchor[0] / np.linalg.norm(anchor) < np.abs(direction[0]):
+    if np.abs(anchor[0] / np.linalg.norm(anchor) - np.abs(direction[0])) < 1e-5: # treat as equal
+        current_max = np.linalg.norm(anchor)
+    elif anchor[0] / np.linalg.norm(anchor) < np.abs(direction[0]):
         current_max = np.abs(anchor[0] / direction[0])
     else:
         current_max = np.abs(anchor[1] / direction[1])
+    current_max = np.min([np.linalg.norm(anchor)*0.1, current_max])
     bound_point = anchor + direction * current_max
     env.env.env.anchor_kp=bound_point
     bound_performance, bound_max = evaluate_policy(env, policy)
@@ -84,18 +103,18 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v1124_energy25_vel4_kd1300_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd1000/policy_params.pkl')
-    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000, 2000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v1124_energy25_vel4_kd1300_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd1000/policy_params.pkl')
-    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[0, 1200])
-    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
-    parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.7)
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v115_energy025armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_leg100_treadmillnpush_frompush/policy_params.pkl')
+    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 1000])
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v115_energy025armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_leg100_treadmillnpush_frompush/policy_params.pkl')
+    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 1000])
+    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.95)
+    parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.6)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
     parser.add_argument('--max_iter', help='Maximum Iteration', type=int, default=2000)
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_200eachit_maxthre_vel4_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_fromsd124energy25_dcontrolconstraint1_damp2'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_100eachit_vel55_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_e025_withbalanceassist_treadmill_startfromhighvel_fixed_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -173,8 +192,9 @@ def main():
     for iter in range(args.max_iter):
         print('curriculum iter ', iter)
         print('ref score: ', reference_anchor_score)
+
         opt_pi = pposgd_mirror.learn(env, policy_fn,
-                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 200,
+                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 100,
                                     timesteps_per_batch=int(args.batch_size),
                                     clip_param=0.2, entcoeff=0.0,
                                     optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
@@ -184,6 +204,8 @@ def main():
                                     return_threshold=reference_anchor_score,
                                     init_policy_params = previous_params,
                                     policy_scope='pi'+str(iter),
+                                     min_iters = 0,
+                                     reward_drop_bound=True,
                                     #max_threshold = reference_max_score,
                                     )
         print('one learning iteration done')
@@ -202,6 +224,8 @@ def main():
                 int_d2 = directions[1] + directions[2]
                 directions.append(int_d1 / np.linalg.norm(int_d1))
                 directions.append(int_d2 / np.linalg.norm(int_d2))
+
+                directions = [np.array([0.0, -1.0])] # only search in one direction
                 candidate_next_anchors = []
                 for direction in directions:
                     found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, reference_max_score, 6)
@@ -213,10 +237,20 @@ def main():
                         closest_candidate = np.copy(found_point)
                 if np.linalg.norm(closest_candidate) < 0.5:
                     closest_candidate = np.array([0, 0])
+                if np.abs(closest_candidate[0]) < 0.1:
+                    closest_candidate[0] = 0.0
+                if np.abs(closest_candidate[1]) < 0.1:
+                    closest_candidate[1] = 0.0
             closest_candidate = MPI.COMM_WORLD.bcast(closest_candidate, root=0)
 
             current_curriculum = np.copy(closest_candidate)
         env.env.env.anchor_kp = current_curriculum
+
+        print('Update Init Pose Distributions')
+        update_init_poses(env, opt_pi)
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            joblib.dump([env.env.env.init_qs, env.env.env.init_dqs], logger.get_dir()+'/init_poses_'+np.array2string(current_curriculum, separator=',')+'.pkl', compress=True)
+            joblib.dump([env.env.env.init_qs, env.env.env.init_dqs], logger.get_dir() + '/init_poses.pkl', compress=True)
 
         curriculum_evolution.append(current_curriculum)
         print('Current curriculum: ', current_curriculum)

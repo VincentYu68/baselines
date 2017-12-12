@@ -110,18 +110,18 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v115_energy025armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_leg100_treadmillnpush_frompush/policy_params.pkl')
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v116_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_treadmillnpush_frompush/policy_params.pkl')
     parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 1000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v115_energy025armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_leg100_treadmillnpush_frompush/policy_params.pkl')
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v116_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_treadmillnpush_frompush/policy_params.pkl')
     parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 1000])
-    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.95)
+    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
     parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.6)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
     parser.add_argument('--max_iter', help='Maximum Iteration', type=int, default=2000)
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_100eachit_vel55_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_e025_withbalanceassist_treadmill_startfromhighvel_fixed_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_100eachit_vel55_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_e01_withbalanceassist_treadmill_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -244,20 +244,20 @@ def main():
                         closest_candidate = np.copy(found_point)
                 if np.linalg.norm(closest_candidate) < 0.5:
                     closest_candidate = np.array([0, 0])
-                if np.abs(closest_candidate[0]) < 0.1:
+                if np.abs(closest_candidate[0]) < 0.5:
                     closest_candidate[0] = 0.0
-                if np.abs(closest_candidate[1]) < 0.1:
+                if np.abs(closest_candidate[1]) < 0.5:
                     closest_candidate[1] = 0.0
             closest_candidate = MPI.COMM_WORLD.bcast(closest_candidate, root=0)
 
             current_curriculum = np.copy(closest_candidate)
         env.env.env.anchor_kp = current_curriculum
 
-        print('Update Init Pose Distributions')
+        '''print('Update Init Pose Distributions')
         update_init_poses(env, opt_pi)
         if MPI.COMM_WORLD.Get_rank() == 0:
             joblib.dump([env.env.env.init_qs, env.env.env.init_dqs], logger.get_dir()+'/init_poses_'+np.array2string(current_curriculum, separator=',')+'.pkl', compress=True)
-            joblib.dump([env.env.env.init_qs, env.env.env.init_dqs], logger.get_dir() + '/init_poses.pkl', compress=True)
+            joblib.dump([env.env.env.init_qs, env.env.env.init_dqs], logger.get_dir() + '/init_poses.pkl', compress=True)'''
 
         curriculum_evolution.append(current_curriculum)
         print('Current curriculum: ', current_curriculum)

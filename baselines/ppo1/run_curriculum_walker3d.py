@@ -108,12 +108,12 @@ def callback(localv, globalv):
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
+    parser.add_argument('--env', help='environment ID', default='DartWalker3d-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v116_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_treadmillnpush_frompush/policy_params.pkl')
-    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 1000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v116_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_treadmillnpush_frompush/policy_params.pkl')
-    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 1000])
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartWalker3d-v10_energy01_vel4_mirror_velrew3_asinput/policy_params.pkl')
+    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 2000])
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartWalker3d-v10_energy01_vel4_mirror_velrew3_asinput/policy_params.pkl')
+    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 2000])
     parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
     parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.6)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
@@ -121,7 +121,7 @@ def main():
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_100eachit_vel55_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_e01_withbalanceassist_treadmill_startfromhighvel_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_200eachit_vel4_runningavg3_e01_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -135,14 +135,13 @@ def main():
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, -11, 12, -13, 14, 15, 16, -5, 6, -7, 8, 9,
-                                                      10, -17, 18, -19, -24, 25, -26, 27, -20, 21, -22, 23,
-                                                      28, 29, -30, 31, -32, -33, -40, 41, -42, 43, 44, 45, -34, 35, -36,
-                                                      37, 38, 39, -46, 47, -48, -53, 54, -55, 56, -49, 50, -51, 52, 58,
-                                                      57, 59]),
+                                                     [0.0001, -1, 2, -3, -4, -5, -6, 7, 14, -15, -16, 17, 18, -19, 8,
+                                                      -9, -10, 11, 12, -13,
+                                                      20, 21, -22, 23, -24, -25, -26, -27, 28, 35, -36, -37, 38, 39,
+                                                      -40, 29, -30, -31, 32, 33,
+                                                      -34, 42, 41, 43]),
                                                  action_permutation=np.array(
-                                                     [-6, 7, -8, 9, 10, 11, -0.001, 1, -2, 3, 4, 5, -12, 13, -14, -19,
-                                                      20, -21, 22, -15, 16, -17, 18]))
+                                                     [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
 
     policy = policy_fn('policy', ob_space, ac_space)
     init_curriculum = np.array(args.init_curriculum)
@@ -201,7 +200,7 @@ def main():
         print('ref score: ', reference_anchor_score)
 
         opt_pi = pposgd_mirror.learn(env, policy_fn,
-                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 100,
+                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 200,
                                     timesteps_per_batch=int(args.batch_size),
                                     clip_param=0.2, entcoeff=0.0,
                                     optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
@@ -232,7 +231,7 @@ def main():
                 directions.append(int_d1 / np.linalg.norm(int_d1))
                 directions.append(int_d2 / np.linalg.norm(int_d2))
 
-                directions = [np.array([0.0, -1.0])] # only search in one direction
+                #directions = [np.array([0.0, -1.0])] # only search in one direction
                 candidate_next_anchors = []
                 for direction in directions:
                     found_point, perf = binary_search_curriculum(env, opt_pi, current_curriculum, direction, reference_score, reference_max_score, 6)

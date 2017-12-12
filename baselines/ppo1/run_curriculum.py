@@ -20,14 +20,21 @@ def update_init_poses(env, policy):
     collected_qs = []
     collected_dqs = []
     step = 0
+    qdqs = []
+    velrews = []
     while True:
         o, rew, done, info = env.step(policy.act(False, o)[0])
-        if np.abs(info['vel_rew']) < 0.5 and step > 100:
-            collected_qs.append(env.env.env.robot_skeleton.q)
-            collected_dqs.append(env.env.env.robot_skeleton.dq)
+        if step > 100:
+            velrews.append(np.abs(info['vel_rew']))
+            qdqs.append([env.env.env.robot_skeleton.q, env.env.env.robot_skeleton.dq])
         if done:
             break
         step += 1
+    thres = np.sort(velrews)[int(0.05*len(velrews))]
+    for i in range(len(velrews)):
+        if velrews[i] < thres:
+            collected_qs.append(qdqs[i][0])
+            collected_dqs.append(qdqs[i][1])
     env.env.env.init_qs = collected_qs
     env.env.env.init_dqs = collected_dqs
     print('Collected init poses ', len(collected_dqs))

@@ -59,9 +59,10 @@ if __name__ == '__main__':
             sess.run(assign_op)
 
         if 'curriculum' in sys.argv[2] and 'policy_params.pkl' in sys.argv[2]:
-            init_qs, init_dqs = joblib.load(sys.argv[2].replace('policy_params.pkl', 'init_poses.pkl'))
-            env.env.init_qs = init_qs
-            env.env.init_dqs = init_dqs
+            if os.path.isfile(sys.argv[2].replace('policy_params.pkl', 'init_poses.pkl')):
+                init_qs, init_dqs = joblib.load(sys.argv[2].replace('policy_params.pkl', 'init_poses.pkl'))
+                env.env.init_qs = init_qs
+                env.env.init_dqs = init_dqs
 
     print('===================')
 
@@ -129,8 +130,8 @@ if __name__ == '__main__':
             for i in rg:
                 plt.plot(np.array(actions)[:, i])
     if sys.argv[1] == 'DartHumanWalker-v1':
-        rendergroup = [[0,1,2, 6,7,8], [3,9], [4,5,10,11], [12,13,14]]
-        titles = ['thigh', 'knee', 'foot', 'waist']
+        rendergroup = [[0,1,2, 6,7,8], [3,9], [4,5,10,11], [12,13,14], [15,16,7,18]]
+        titles = ['thigh', 'knee', 'foot', 'waist', 'arm']
         for i,rg in enumerate(rendergroup):
             plt.figure()
             plt.title(titles[i])

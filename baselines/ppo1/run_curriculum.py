@@ -110,18 +110,18 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v116_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_treadmillnpush_frompush/policy_params.pkl')
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v120_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_constpush_limitarmrot/policy_params.pkl')
     parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 1000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v116_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_treadmillnpush_frompush/policy_params.pkl')
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v120_energy01armlowweight_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcon1_asinput_damping2kneethigh_thigh250knee60_constpush_limitarmrot/policy_params.pkl')
     parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 1000])
-    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
+    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.8)
     parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.6)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
     parser.add_argument('--max_iter', help='Maximum Iteration', type=int, default=2000)
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_100eachit_vel55_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_e01_withbalanceassist_treadmill_startfromhighvel_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_100eachit_vel55_up1fwd01ltl15_spinepen1_thighyawpen001_runningavg3_e01_constpush_newarmrotstrength_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -162,7 +162,6 @@ def main():
         assign_op = ref_policy.get_variables()[i].assign(
             ref_policy_params[ref_policy.get_variables()[i].name.replace('ref_'+cur_scope, ref_scope, 1)])
         sess.run(assign_op)
-
 
     anchor_threshold = args.anc_thres
     progress_threshold = args.prog_thres

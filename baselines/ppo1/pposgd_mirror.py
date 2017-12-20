@@ -32,6 +32,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
     while True:
         prevac = ac
         ac, vpred = pi.act(stochastic, ob)
+
         # Slight weirdness here because we need value function at time T
         # before returning segment [0, T-1] so we get the correct
         # terminal value
@@ -107,7 +108,8 @@ def learn(env, policy_func, *,
         max_threshold=None,
         positive_rew_enforce = False,
         reward_drop_bound = None,
-        min_iters = 0
+        min_iters = 0,
+        ref_policy_params = None
         ):
 
     # Setup losses and stuff
@@ -165,6 +167,16 @@ def learn(env, policy_func, *,
             U.get_session().run(assign_op)
             assign_op = oldpi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             U.get_session().run(assign_op)
+
+    if ref_policy_params is not None:
+        ref_pi = policy_func("ref_pi", ob_space, ac_space)
+        cur_scope = ref_pi.get_variables()[0].name[0:ref_pi.get_variables()[0].name.find('/')]
+        orig_scope = list(ref_policy_params.keys())[0][0:list(ref_policy_params.keys())[0].find('/')]
+        for i in range(len(ref_pi.get_variables())):
+            assign_op = ref_pi.get_variables()[i].assign(
+                ref_policy_params[ref_pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
+            U.get_session().run(assign_op)
+        env.env.env.ref_policy = ref_pi
 
     adam.sync()
 

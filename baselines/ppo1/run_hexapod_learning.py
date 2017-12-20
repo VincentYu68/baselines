@@ -42,7 +42,7 @@ def train_mirror(env_id, num_timesteps, seed):
     gym.logger.setLevel(logging.WARN)
     pposgd_mirror.learn(env, policy_fn,
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(2500),
+            timesteps_per_batch=int(1500),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',

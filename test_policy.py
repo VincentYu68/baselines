@@ -94,6 +94,7 @@ if __name__ == '__main__':
     action_pen = []
     deviation_pen = []
     ref_rewards = []
+    ref_feat_rew = []
     rew_seq = []
     com_z = []
     x_vel = []
@@ -121,6 +122,8 @@ if __name__ == '__main__':
             contact_force_x.append(env_info['contact_force_x'])
         if 'ref_reward' in env_info:
             ref_rewards.append(env_info['ref_reward'])
+        if 'ref_feat_rew' in env_info:
+            ref_feat_rew.append(env_info['ref_feat_rew'])
 
         com_z.append(o[1])
         foot_contacts.append(o[-2:])
@@ -199,6 +202,9 @@ if __name__ == '__main__':
     plt.figure()
     plt.title('ref_rewards')
     plt.plot(ref_rewards)
+    plt.figure()
+    plt.title('ref_feat_rew')
+    plt.plot(ref_feat_rew)
     print('total ref rewards ', np.sum(ref_rewards))
     plt.show()
 

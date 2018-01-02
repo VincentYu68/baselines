@@ -92,7 +92,8 @@ def learn(env, policy_func, *,
         max_timesteps=0, max_episodes=0, max_iters=0, max_seconds=0,  # time constraint
         callback=None, # you can do anything in the callback, since it takes locals(), globals()
         adam_epsilon=1e-5,
-        schedule='constant' # annealing for stepsize parameters (epsilon and adam)
+        schedule='constant', # annealing for stepsize parameters (epsilon and adam)
+        init_policy_params = None
         ):
     # Setup losses and stuff
     # ----------------------------------------
@@ -133,6 +134,15 @@ def learn(env, policy_func, *,
     compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
 
     U.initialize()
+    if init_policy_params is not None:
+        cur_scope = pi.get_variables()[0].name[0:pi.get_variables()[0].name.find('/')]
+        orig_scope = list(init_policy_params.keys())[0][0:list(init_policy_params.keys())[0].find('/')]
+        for i in range(len(pi.get_variables())):
+            assign_op = pi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
+            U.get_session().run(assign_op)
+            assign_op = oldpi.get_variables()[i].assign(init_policy_params[pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
+            U.get_session().run(assign_op)
+
     adam.sync()
 
     # Prepare for rollouts

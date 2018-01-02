@@ -68,7 +68,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
                 ep_rets.append(cur_ep_ret)
                 ep_lens.append(cur_ep_len)
             else:
-                t -= cur_ep_len
+                t -= (cur_ep_len+1)
             cur_ep_ret = 0
             cur_ep_len = 0
             ob = env.reset()
@@ -319,7 +319,7 @@ def learn(env, policy_func, *,
                 max_thres_satisfied = True
             else:
                 max_thres_satisfied = False
-    return pi
+    return pi, np.mean(rewbuffer)
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]

@@ -72,7 +72,7 @@ def train_mirror(env_id, num_timesteps, seed):
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
             callback=callback,
-            sym_loss_weight=2.0,
+            sym_loss_weight=4.0,
             positive_rew_enforce=False,
             #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1156_energy1_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg4_dcontrolconstraint1_asinput_damping2kneethigh_thigh250knee60/policy_params.pkl'),
             reward_drop_bound=True,
@@ -87,8 +87,8 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy01_vel4_mirror_velrew3_asinput')
-    train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy04_vel15_mirror4_velrew3_asinput_damping5_contactpen02_1kmaxquad_curriculum')
+    train_mirror(args.env, num_timesteps=int(5000*4*2500), seed=args.seed)
 
 
 if __name__ == '__main__':

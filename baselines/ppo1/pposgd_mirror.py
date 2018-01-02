@@ -331,7 +331,7 @@ def learn(env, policy_func, *,
                 max_thres_satisfied = True
             else:
                 max_thres_satisfied = False
-    return pi
+    return pi, np.mean(rewbuffer)
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]

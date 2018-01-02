@@ -66,7 +66,7 @@ if __name__ == '__main__':
                 env.env.init_qs = init_qs
                 env.env.init_dqs = init_dqs
 
-        ref_policy_params = joblib.load('data/ppo_DartHumanWalker-v1189_energy03normalized_vel55_6s_mirror_up05fwd05ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_avg_dcon1_asinput_damping2kneethigh_thigh150knee100_curriculum/policy_params.pkl')
+        '''ref_policy_params = joblib.load('data/ppo_DartHumanWalker-v1210_energy015_vel65_6s_mirror_up01fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_avg_dcon1_asinput_damping2kneethigh_thigh150knee100_curriculum_1xjoint_shoulder90_dqpen00001/policy_params.pkl')
         ref_policy = policy_fn("ref_pi", ob_space, ac_space)
 
         cur_scope = ref_policy.get_variables()[0].name[0:ref_policy.get_variables()[0].name.find('/')]
@@ -78,7 +78,7 @@ if __name__ == '__main__':
                 ref_policy_params[ref_policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             sess.run(assign_op)
 
-        env.env.ref_policy = ref_policy
+        env.env.ref_policy = ref_policy'''
 
     print('===================')
 
@@ -99,16 +99,20 @@ if __name__ == '__main__':
     com_z = []
     x_vel = []
     foot_contacts = []
-    contact_force_x = []
+    contact_force = []
+    avg_vels = []
     d=False
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(True, o)
+            ac, vpred = policy.act(False, o)
             act = ac
         else:
             act = env.action_space.sample()
         actions.append(act)
+
+        '''if env_wrapper.env.env.t > 3.0 and env_wrapper.env.env.t < 6.0:
+            env_wrapper.env.env.robot_skeleton.bodynode('head').add_ext_force(np.array([-200, 0, 0]))'''
         o, r, d, env_info = env_wrapper.step(act)
 
         if 'action_pen' in env_info:
@@ -118,12 +122,14 @@ if __name__ == '__main__':
         rew_seq.append(r)
         if 'deviation_pen' in env_info:
             deviation_pen.append(env_info['deviation_pen'])
-        if 'contact_force_x' in env_info:
-            contact_force_x.append(env_info['contact_force_x'])
+        if 'contact_force' in env_info:
+            contact_force.append(env_info['contact_force'])
         if 'ref_reward' in env_info:
             ref_rewards.append(env_info['ref_reward'])
         if 'ref_feat_rew' in env_info:
             ref_feat_rew.append(env_info['ref_feat_rew'])
+        if 'avg_vel' in env_info:
+            avg_vels.append(env_info['avg_vel'])
 
         com_z.append(o[1])
         foot_contacts.append(o[-2:])
@@ -156,7 +162,7 @@ if __name__ == '__main__':
             #break
     print('avg rew ', rew / traj)
 
-    if sys.argv[1] == 'DartWalker3d-v1':
+    if sys.argv[1] == 'DartWalker3d-v1' or sys.argv[1] == 'DartWalker3dSPD-v1':
         rendergroup = [[0,1,2], [3,4,5, 9,10,11], [6,12], [7,8, 12,13]]
         for rg in rendergroup:
             plt.figure()
@@ -196,16 +202,26 @@ if __name__ == '__main__':
     plt.title('foot contacts')
     plt.plot(1-foot_contacts[:, 0])
     plt.plot(1-foot_contacts[:, 1])
-    #plt.figure()
-    #plt.title('contact_force_x')
-    #plt.plot(contact_force_x)
+    plt.figure()
+
+    if len(contact_force) > 0:
+        plt.title('contact_force')
+        plt.plot(np.array(contact_force)[:,0], label='x')
+        plt.plot(np.array(contact_force)[:,1], label='y')
+        plt.plot(np.array(contact_force)[:,2], label='z')
+        plt.legend()
     plt.figure()
     plt.title('ref_rewards')
     plt.plot(ref_rewards)
     plt.figure()
     plt.title('ref_feat_rew')
     plt.plot(ref_feat_rew)
+    plt.figure()
+    plt.title('average velocity')
+    plt.plot(avg_vels)
     print('total ref rewards ', np.sum(ref_rewards))
+    print('total vel rewrads ', np.sum(vel_rew))
+    print('total action rewards ', np.sum(action_pen))
     plt.show()
 
 

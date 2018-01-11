@@ -80,6 +80,11 @@ if __name__ == '__main__':
 
         env.env.ref_policy = ref_policy'''
 
+
+        #init_q, init_dq = joblib.load('data/skel_data/init_states.pkl')
+        #env.env.init_qs = init_q
+        #env.env.init_dqs = init_dq
+
     print('===================')
 
     o = env_wrapper.reset()
@@ -102,6 +107,11 @@ if __name__ == '__main__':
     contact_force = []
     avg_vels = []
     d=False
+    step = 0
+
+    save_qs = []
+    save_dqs = []
+    save_init_state = False
 
     while ct < traj:
         if policy is not None:
@@ -137,6 +147,7 @@ if __name__ == '__main__':
         rew += r
 
         env_wrapper.render()
+        step += 1
 
         #time.sleep(0.1)
         if len(o) > 25:
@@ -147,7 +158,12 @@ if __name__ == '__main__':
                 print('q ', np.array2string(env.env.robot_skeleton.q, separator=','))
                 print('dq ', np.array2string(env.env.robot_skeleton.dq, separator=','))
 
+        if np.abs(env.env.t - env.env.tv_endtime) < 0.01:
+            save_qs.append(env.env.robot_skeleton.q)
+            save_dqs.append(env.env.robot_skeleton.dq)
+
         if d:
+            step = 0
             if 'contact_locations' in env_info:
                 c_loc = env_info['contact_locations']
                 for j in range(len(c_loc[0]) - 1):
@@ -161,6 +177,9 @@ if __name__ == '__main__':
             o=env_wrapper.reset()
             #break
     print('avg rew ', rew / traj)
+
+    if len(save_qs) > 0 and save_init_state:
+        joblib.dump([save_qs, save_dqs], 'data/skel_data/init_states.pkl')
 
     if sys.argv[1] == 'DartWalker3d-v1' or sys.argv[1] == 'DartWalker3dSPD-v1':
         rendergroup = [[0,1,2], [3,4,5, 9,10,11], [6,12], [7,8, 12,13]]
@@ -179,6 +198,14 @@ if __name__ == '__main__':
     if sys.argv[1] == 'DartDogRobot-v1':
         rendergroup = [[0,1,2], [3, 4,5], [6,7,8],[9,10,11]]
         titles = ['rear right leg', 'rear left leg', 'front right leg', 'front left leg']
+        for i,rg in enumerate(rendergroup):
+            plt.figure()
+            plt.title(titles[i])
+            for i in rg:
+                plt.plot(np.array(actions)[:, i])
+    if sys.argv[1] == 'DartHexapod-v1':
+        rendergroup = [[0,1,2, 3,4,5], [6,7,8, 9,10,11], [12,13,14, 15,16,17]]
+        titles = ['hind legs', 'middle legs', 'front legs']
         for i,rg in enumerate(rendergroup):
             plt.figure()
             plt.title(titles[i])
@@ -223,6 +250,8 @@ if __name__ == '__main__':
     print('total vel rewrads ', np.sum(vel_rew))
     print('total action rewards ', np.sum(action_pen))
     plt.show()
+
+
 
 
 

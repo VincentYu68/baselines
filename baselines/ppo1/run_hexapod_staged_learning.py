@@ -39,13 +39,14 @@ def train_mirror(env_id, num_timesteps, seed):
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, -5, -6, 7, 14, -15, -16, 17, 18, -19, 8,
-                                                      -9, -10, 11, 12, -13,
-                                                      20, 21, -22, 23, -24, -25, -26, -27, 28, 35, -36, -37, 38, 39,
-                                                      -40, 29, -30, -31, 32, 33,
-                                                      -34, 42, 41, 43]),
+                                                     [0.0001, -1, 2, -3, -4, 8, 9, 10, 5, 6, 7, 14, 15, 16, 11, 12, 13,
+                                                      20, 21, 22, 17, 18, 19,
+                                                      23, 24, -25, 26, -27, -28, 32, 33, 34, 29, 30, 31, 38, 39, 40, 35,
+                                                      36, 37, 44, 45, 46, 41, 42, 43,
+                                                      48, 47, 50, 49, 52, 51, 53]),
                                                  action_permutation=np.array(
-                                                     [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
+                                                     [3, 4, 5, 0.0001, 1, 2, 9, 10, 11, 6, 7, 8, 15, 16, 17, 12, 13,
+                                                      14]))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
     env.seed(seed+MPI.COMM_WORLD.Get_rank())
@@ -54,11 +55,11 @@ def train_mirror(env_id, num_timesteps, seed):
     previous_params = None
     iter_num = 0
     last_iter = False
-  
+
     # if initialize from previous runs
-    '''previous_params = joblib.load('data/ppo_DartWalker3d-v111_energy04_vel1_1s_mirror4_velrew3_damping5_anklesprint100_5_rotpen1_rew01xinit_stagedcurriculum/policy_params.pkl')
-    env.env.env.assist_schedule = [[0.0,np.array([250.,125.])],[3.0,np.array([125.,62.5])],[6.0,[62.5,31.25]]]'''
- 
+    #previous_params = joblib.load('')
+    #env.env.env.assist_schedule = []
+
     joblib.dump(str(env.env.env.__dict__), logger.get_dir() + '/env_specs.pkl', compress=True)
 
     while True:
@@ -106,18 +107,16 @@ def train_mirror(env_id, num_timesteps, seed):
             last_iter = True
             print('Entering Last Iteration!')
 
-
-
     env.close()
 
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='DartWalker3d-v1')
+    parser.add_argument('--env', help='environment ID', default='DartHexapod-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel4_3s_mirror4_velrew3_damping5_anklesprint100_5_rotpen0_rew01xinit_stagedcurriculum4s75s34ratio')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_rew01xinit_thigh200_100springankle_stagedcurriculum')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

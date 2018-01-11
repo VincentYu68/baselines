@@ -130,12 +130,8 @@ def main():
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-<<<<<<< HEAD
-    logger.configure('data/ppo_curriculum_150eachit_vel5_up03fwd03ltl15_spinepen1_thighyawpen001_mirror4_runningavg3_e1_assistinitstage_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
-=======
     logger.configure('data/ppo_curriculum_150eachit_vel15_tvel1scale_up03fwd03ltl15_spinepen1_thighyawpen001_mirror4_runningavg1p5_2s_stride15_e1_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
->>>>>>> fc14f8129690d9f6e8ab4725273b6071c3bd4153
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
     env = gym.make(args.env)

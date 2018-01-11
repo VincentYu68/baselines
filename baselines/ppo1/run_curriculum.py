@@ -119,18 +119,18 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v161_energy3_vel15_15s_mirror4_up03fwd03ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrewavg3_2s_dcon1_asinput_damping2kneethigh_thigh160knee100_shoulder100_armpenalty15_torque1x_dqpen0_2kassist/policy_params.pkl')
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartHumanWalker-v1241_energy15_vel5_5s_pdscale1_mirror4_up03fwd03ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_2s_dcon1_asinput_damping2kneethigh_thigh160knee100_curriculum_1xjoint_shoulder100_dqpen0_2kassist/policy_params.pkl')
     parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 2000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v161_energy3_vel15_15s_mirror4_up03fwd03ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrewavg3_2s_dcon1_asinput_damping2kneethigh_thigh160knee100_shoulder100_armpenalty15_torque1x_dqpen0_2kassist/policy_params.pkl')
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartHumanWalker-v1241_energy15_vel5_5s_pdscale1_mirror4_up03fwd03ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_2s_dcon1_asinput_damping2kneethigh_thigh160knee100_curriculum_1xjoint_shoulder100_dqpen0_2kassist/policy_params.pkl')
     parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 2000])
-    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
-    parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.7)
+    parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.75)
+    parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.6)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
     parser.add_argument('--max_iter', help='Maximum Iteration', type=int, default=2000)
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_150eachit_vel15_tvel1scale_up03fwd03ltl15_spinepen1_thighyawpen001_mirror4_runningavg1p5_2s_stride15_e1_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_150eachit_vel5_up03fwd03ltl15_spinepen1_thighyawpen001_mirror4_runningavg3_e1_assistinitstage_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -202,7 +202,7 @@ def main():
 
     current_curriculum = np.copy(init_curriculum)
     print('reference scores: ', reference_score, reference_anchor_score, reference_max_score)
-    env.env.env.energy_weight *= 0.333
+    #env.env.env.energy_weight *= 0.333
     #env.env.env.final_tv -= 2.5
 
     previous_params = policy_params

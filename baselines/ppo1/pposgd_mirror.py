@@ -109,7 +109,8 @@ def learn(env, policy_func, *,
         positive_rew_enforce = False,
         reward_drop_bound = None,
         min_iters = 0,
-        ref_policy_params = None
+        ref_policy_params = None,
+         rollout_length_thershold = None 
         ):
 
     # Setup losses and stuff
@@ -331,6 +332,9 @@ def learn(env, policy_func, *,
                 max_thres_satisfied = True
             else:
                 max_thres_satisfied = False
+        if rollout_length_thershold is not None:
+            if np.mean(lenbuffer) > rollout_length_thershold:
+                break
     return pi, np.mean(rewbuffer)
 
 def flatten_lists(listoflists):

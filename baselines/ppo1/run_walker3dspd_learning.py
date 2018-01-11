@@ -87,8 +87,8 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy003_vel15_mirror4_velrew3_spd1k300_kd001_asinput')
-    train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy003_vel15_mirror4_velrew3_spd1k300_kd001_nocurriculum_frameskip5')
+    train_mirror(args.env, num_timesteps=int(5000*4*1500), seed=args.seed)
 
 
 if __name__ == '__main__':

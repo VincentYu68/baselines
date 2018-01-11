@@ -69,7 +69,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
                 ep_rets.append(cur_ep_ret)
                 ep_lens.append(cur_ep_len)
             else:
-                t -= cur_ep_len
+                t -= (cur_ep_len+1)
             cur_ep_ret = 0
             cur_ep_len = 0
             ob = env.reset()

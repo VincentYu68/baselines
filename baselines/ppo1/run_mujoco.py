@@ -98,6 +98,5 @@ def main():
     #logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy05_bal_vel4smooth_mirror_up1fwd01ltl1_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcontrolconstraint1_strongerarm_asinput_treadmill')
     train_mirror(args.env, num_timesteps=int(5000*4*3000), seed=args.seed)
 
-
 if __name__ == '__main__':
     main()

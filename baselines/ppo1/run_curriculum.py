@@ -130,8 +130,12 @@ def main():
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
+<<<<<<< HEAD
     logger.configure('data/ppo_curriculum_150eachit_vel5_up03fwd03ltl15_spinepen1_thighyawpen001_mirror4_runningavg3_e1_assistinitstage_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
+=======
+    logger.configure('data/ppo_curriculum_150eachit_vel15_tvel1scale_up03fwd03ltl15_spinepen1_thighyawpen001_mirror4_runningavg1p5_2s_stride15_e1_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+>>>>>>> fc14f8129690d9f6e8ab4725273b6071c3bd4153
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
     env = gym.make(args.env)
@@ -202,8 +206,6 @@ def main():
 
     current_curriculum = np.copy(init_curriculum)
     print('reference scores: ', reference_score, reference_anchor_score, reference_max_score)
-    #env.env.env.energy_weight *= 0.333
-    #env.env.env.final_tv -= 2.5
 
     previous_params = policy_params
     for iter in range(args.max_iter):
@@ -238,6 +240,7 @@ def main():
                 print('update reference scores')
                 reference_score = reference_score / reference_anchor_score * final_rew
                 reference_anchor_score = final_rew
+                
 
             closest_candidate = None
             #if MPI.COMM_WORLD.Get_rank() == 0:

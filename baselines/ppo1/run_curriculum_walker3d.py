@@ -110,10 +110,10 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartWalker3d-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartWalker3d-v10_energy01_vel4_mirror_velrew3_asinput/policy_params.pkl')
-    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 2000])
-    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartWalker3d-v10_energy01_vel4_mirror_velrew3_asinput/policy_params.pkl')
-    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 2000])
+    parser.add_argument('--init_policy', help='Initial Policy', default='data/ppo_DartWalker3d-v1303_energy04_vel15_mirror4_velrew3_asinput_curriculum/policy_params.pkl')
+    parser.add_argument('--init_curriculum', help='Initial Curriculum', nargs='+', default=[2000.0, 1000])
+    parser.add_argument('--ref_policy', help='Reference Policy', default='data/ppo_DartWalker3d-v1303_energy04_vel15_mirror4_velrew3_asinput_curriculum/policy_params.pkl')
+    parser.add_argument('--ref_curriculum', help='Reference Curriculum', nargs='+', default=[2000.0, 1000])
     parser.add_argument('--anc_thres', help='Anchor Threshold', type=float, default=0.85)
     parser.add_argument('--prog_thres', help='Progress Threshold', type=float, default=0.6)
     parser.add_argument('--batch_size', help='Batch Size', type=int, default=2500)
@@ -121,7 +121,7 @@ def main():
     parser.add_argument('--use_reftraj', help='Use reference trajectory', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_curriculum_200eachit_vel4_runningavg3_e01_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
+    logger.configure('data/ppo_curriculum_150eachit_vel15_runningavg3_e04_'+args.env+'_'+str(args.seed)+'_'+str(args.anc_thres)+'_'+str(args.prog_thres)+'_'+str(args.batch_size))
 
     sess = U.make_session(num_cpu=1).__enter__()
     set_global_seeds(args.seed)
@@ -199,8 +199,8 @@ def main():
         print('curriculum iter ', iter)
         print('ref score: ', reference_anchor_score)
 
-        opt_pi = pposgd_mirror.learn(env, policy_fn,
-                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 200,
+        opt_pi, final_rew = pposgd_mirror.learn(env, policy_fn,
+                                    max_timesteps=args.batch_size * MPI.COMM_WORLD.Get_size() * 150,
                                     timesteps_per_batch=int(args.batch_size),
                                     clip_param=0.2, entcoeff=0.0,
                                     optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
@@ -222,6 +222,11 @@ def main():
                 reference_trajecotry = gen_reftraj(env, opt_pi, 299)
             reference_trajectory=MPI.COMM_WORLD.bcast(reference_trajectory, root = 0)
             env.env.reference_trajectory = reference_trajectory
+
+            if final_rew < reference_anchor_score * 0.95:
+                print('update reference scores')
+                reference_score = reference_score / reference_anchor_score * final_rew
+                reference_anchor_score = final_rew
 
             closest_candidate = None
             if MPI.COMM_WORLD.Get_rank() == 0:

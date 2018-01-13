@@ -91,8 +91,8 @@ def train_mirror(env_id, num_timesteps, seed):
         # update the assist schedule
         for s in range(len(env.env.env.assist_schedule)-1):
             env.env.env.assist_schedule[s][1] = np.copy(env.env.env.assist_schedule[s+1][1])
-        env.env.env.assist_schedule[-1][1][0] *= 0.5
-        env.env.env.assist_schedule[-1][1][1] *= 0.5
+        env.env.env.assist_schedule[-1][1][0] *= 0.75
+        env.env.env.assist_schedule[-1][1][1] *= 0.75
         if env.env.env.assist_schedule[-1][1][0] < 5.0:
             env.env.env.assist_schedule[-1][1][0] = 0.0
         if env.env.env.assist_schedule[-1][1][1] < 5.0:

@@ -62,6 +62,7 @@ def train_mirror(env_id, num_timesteps, seed):
 
     joblib.dump(str(env.env.env.__dict__), logger.get_dir() + '/env_specs.pkl', compress=True)
 
+    reward_threshold = None
     while True:
         if not last_iter:
             rollout_length_thershold = env.env.env.assist_schedule[2][0] / env.env.env.dt
@@ -80,7 +81,12 @@ def train_mirror(env_id, num_timesteps, seed):
                 reward_drop_bound=True,
                 rollout_length_thershold = rollout_length_thershold,
                 policy_scope='pi' + str(iter_num),
+                return_threshold = reward_threshold,
             )
+        if iter_num == 0:
+            reward_threshold = 0.7 * rew
+        if last_iter:
+            reward_threshold = None
         iter_num += 1
 
         opt_variable = opt_pi.get_variables()
@@ -91,8 +97,8 @@ def train_mirror(env_id, num_timesteps, seed):
         # update the assist schedule
         for s in range(len(env.env.env.assist_schedule)-1):
             env.env.env.assist_schedule[s][1] = np.copy(env.env.env.assist_schedule[s+1][1])
-        env.env.env.assist_schedule[-1][1][0] *= 0.5
-        env.env.env.assist_schedule[-1][1][1] *= 0.5
+        env.env.env.assist_schedule[-1][1][0] *= 0.75
+        env.env.env.assist_schedule[-1][1][1] *= 0.75
         if env.env.env.assist_schedule[-1][1][0] < 5.0:
             env.env.env.assist_schedule[-1][1][0] = 0.0
         if env.env.env.assist_schedule[-1][1][1] < 5.0:
@@ -107,8 +113,6 @@ def train_mirror(env_id, num_timesteps, seed):
             last_iter = True
             print('Entering Last Iteration!')
 
-
-
     env.close()
 
 def main():
@@ -118,7 +122,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_rew01xinit_thigh200_100springankle_stagedcurriculum')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_ab4_norotpen_dofpen081515_rew01xinit_thigh160_50springankle_stagedcurriculum_075reduce_07rewthres')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

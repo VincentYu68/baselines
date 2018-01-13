@@ -63,9 +63,9 @@ def train_mirror(env_id, num_timesteps, seed):
 
     while True:
         if not last_iter:
-            rollout_length_thershold = env.env.env.assist_schedule[2][0] / env.env.env.dt
+            rollout_length_threshold = env.env.env.assist_schedule[2][0] / env.env.env.dt
         else:
-            rollout_length_thershold = None
+            rollout_length_threshold = None
         opt_pi, rew = pposgd_mirror.learn(env, policy_fn,
                 max_timesteps=num_timesteps,
                 timesteps_per_batch=int(2500),
@@ -77,7 +77,7 @@ def train_mirror(env_id, num_timesteps, seed):
                 positive_rew_enforce=False,
                 init_policy_params = previous_params,
                 reward_drop_bound=True,
-                rollout_length_thershold = rollout_length_thershold,
+                rollout_length_thershold = rollout_length_threshold,
                 policy_scope='pi' + str(iter_num),
             )
         iter_num += 1
@@ -90,8 +90,8 @@ def train_mirror(env_id, num_timesteps, seed):
         # update the assist schedule
         for s in range(len(env.env.env.assist_schedule)-1):
             env.env.env.assist_schedule[s][1] = np.copy(env.env.env.assist_schedule[s+1][1])
-        env.env.env.assist_schedule[-1][1][0] *= 0.5
-        env.env.env.assist_schedule[-1][1][1] *= 0.5
+        env.env.env.assist_schedule[-1][1][0] *= 0.75
+        env.env.env.assist_schedule[-1][1][1] *= 0.75
         if env.env.env.assist_schedule[-1][1][0] < 5.0:
             env.env.env.assist_schedule[-1][1][0] = 0.0
         if env.env.env.assist_schedule[-1][1][1] < 5.0:

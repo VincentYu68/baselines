@@ -1,257 +1,130 @@
-__author__ = 'yuwenhao'
-
-import gym
+#!/usr/bin/env python
 from baselines.common import set_global_seeds, tf_util as U
 from baselines import bench
 import os.path as osp
-import sys, os, time
-
+import gym, logging
+from baselines import logger
+import sys
 import joblib
-import numpy as np
-
-import matplotlib.pyplot as plt
-from gym import wrappers
 import tensorflow as tf
-from baselines.ppo1 import mlp_policy, pposgd_simple
-import baselines.common.tf_util as U
+import numpy as np
+from mpi4py import MPI
+import os, errno
 
-np.random.seed(1)
+def callback(localv, globalv):
+    if localv['iters_so_far'] % 10 != 0:
+        return
+    save_dict = {}
+    variables = localv['pi'].get_variables()
+    for i in range(len(variables)):
+        cur_val = variables[i].eval()
+        save_dict[variables[i].name] = cur_val
 
-def policy_fn(name, ob_space, ac_space):
-    return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-                                hid_size=64, num_hid_layers=3, gmm_comp=1)
+    save_dir = logger.get_dir() + '/' + (str(localv['env'].env.env.assist_schedule).replace(' ', ''))
+    try:
+        os.makedirs(save_dir)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+    joblib.dump(save_dict, save_dir+'/policy_params_'+ str(localv['iters_so_far'])+'.pkl', compress=True)
+    joblib.dump(save_dict, logger.get_dir() + '/policy_params' + '.pkl', compress=True)
+
+def train_mirror(env_id, num_timesteps, seed):
+    from baselines.ppo1 import mlp_mirror_policy, pposgd_mirror
+    U.make_session(num_cpu=1).__enter__()
+    set_global_seeds(seed)
+    env = gym.make(env_id)
+    def policy_fn(name, ob_space, ac_space):
+        return mlp_mirror_policy.MlpMirrorPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
+                                                 hid_size=64, num_hid_layers=3, gmm_comp=1,
+                                                 mirror_loss=True,
+                                                 observation_permutation=np.array(
+                                                     [0.0001, -1, 2, -3, -4, -11, 12, -13, 14, 15, 16, -5, 6, -7, 8, 9,
+                                                      10, -17, 18, -19, -24, 25, -26, 27, -20, 21, -22, 23, \
+                                                      28, 29, -30, 31, -32, -33, -40, 41, -42, 43, 44, 45, -34, 35, -36,
+                                                      37, 38, 39, -46, 47, -48, -53, 54, -55, 56, -49, 50, -51, 52, 58,
+                                                      57, 59]),
+                                                 action_permutation=np.array(
+                                                     [-6, 7, -8, 9, 10, 11, -0.001, 1, -2, 3, 4, 5, -12, 13, -14, -19,
+                                                      20, -21, 22, -15, 16, -17, 18]))
+    env = bench.Monitor(env, logger.get_dir() and
+        osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
+    env.seed(seed+MPI.COMM_WORLD.Get_rank())
+    gym.logger.setLevel(logging.WARN)
+
+    previous_params = None
+    iter_num = 0
+    last_iter = False
+
+    # if initialize from previous runs
+    #previous_params = joblib.load('')
+    #env.env.env.assist_schedule = []
+
+    joblib.dump(str(env.env.env.__dict__), logger.get_dir() + '/env_specs.pkl', compress=True)
+
+    reward_threshold = None
+    while True:
+        if not last_iter:
+            rollout_length_thershold = env.env.env.assist_schedule[2][0] / env.env.env.dt
+        else:
+            rollout_length_thershold = None
+        opt_pi, rew = pposgd_mirror.learn(env, policy_fn,
+                max_timesteps=num_timesteps,
+                timesteps_per_batch=int(2500),
+                clip_param=0.2, entcoeff=0.0,
+                optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
+                gamma=0.99, lam=0.95, schedule='linear',
+                callback=callback,
+                sym_loss_weight=4.0,
+                positive_rew_enforce=False,
+                init_policy_params = previous_params,
+                reward_drop_bound=True,
+                rollout_length_thershold = rollout_length_thershold,
+                policy_scope='pi' + str(iter_num),
+                return_threshold = reward_threshold,
+            )
+        if iter_num == 0:
+            reward_threshold = 0.7 * rew
+        if last_iter:
+            reward_threshold = None
+        iter_num += 1
+
+        opt_variable = opt_pi.get_variables()
+        previous_params = {}
+        for i in range(len(opt_variable)):
+            cur_val = opt_variable[i].eval()
+            previous_params[opt_variable[i].name] = cur_val
+        # update the assist schedule
+        for s in range(len(env.env.env.assist_schedule)-1):
+            env.env.env.assist_schedule[s][1] = np.copy(env.env.env.assist_schedule[s+1][1])
+        env.env.env.assist_schedule[-1][1][0] *= 0.75
+        env.env.env.assist_schedule[-1][1][1] *= 0.75
+        if env.env.env.assist_schedule[-1][1][0] < 5.0:
+            env.env.env.assist_schedule[-1][1][0] = 0.0
+        if env.env.env.assist_schedule[-1][1][1] < 5.0:
+            env.env.env.assist_schedule[-1][1][1] = 0.0
+        zero_assist = True
+        for s in range(len(env.env.env.assist_schedule)-1):
+            for v in env.env.env.assist_schedule[s][1]:
+                if v != 0.0:
+                    zero_assist = False
+        print('Current Schedule: ', env.env.env.assist_schedule)
+        if zero_assist:
+            last_iter = True
+            print('Entering Last Iteration!')
+
+    env.close()
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
+    parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    args = parser.parse_args()
+    logger.reset()
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_ab4_norotpen_dofpen081515_rew01xinit_thigh160_50springankle_stagedcurriculum_075reduce_07rewthres')
+    train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
+
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        env = gym.make(sys.argv[1])
-    else:
-        env = gym.make('DartWalker3dRestricted-v1')
-
-    if hasattr(env.env, 'disableViewer'):
-        env.env.disableViewer = False
-        '''if hasattr(env.env, 'resample_MP'):
-        env.env.resample_MP = False'''
-
-    record = False
-    if len(sys.argv) > 3:
-        record = int(sys.argv[3]) == 1
-    if record:
-        env_wrapper = wrappers.Monitor(env, 'data/videos/', force=True)
-    else:
-        env_wrapper = env
-
-    sess = tf.InteractiveSession()
-
-    policy = None
-    if len(sys.argv) > 2:
-        policy_params = joblib.load(sys.argv[2])
-        ob_space = env.observation_space
-        ac_space = env.action_space
-        policy = policy_fn("pi", ob_space, ac_space)
-
-        U.initialize()
-
-        cur_scope = policy.get_variables()[0].name[0:policy.get_variables()[0].name.find('/')]
-        orig_scope = list(policy_params.keys())[0][0:list(policy_params.keys())[0].find('/')]
-        vars = policy.get_variables()
-
-        for i in range(len(policy.get_variables())):
-            assign_op = policy.get_variables()[i].assign(
-                policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
-            sess.run(assign_op)
-
-        if 'curriculum' in sys.argv[2] and 'policy_params.pkl' in sys.argv[2]:
-            if os.path.isfile(sys.argv[2].replace('policy_params.pkl', 'init_poses.pkl')):
-                init_qs, init_dqs = joblib.load(sys.argv[2].replace('policy_params.pkl', 'init_poses.pkl'))
-                env.env.init_qs = init_qs
-                env.env.init_dqs = init_dqs
-
-        '''ref_policy_params = joblib.load('data/ppo_DartHumanWalker-v1210_energy015_vel65_6s_mirror_up01fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_avg_dcon1_asinput_damping2kneethigh_thigh150knee100_curriculum_1xjoint_shoulder90_dqpen00001/policy_params.pkl')
-        ref_policy = policy_fn("ref_pi", ob_space, ac_space)
-
-        cur_scope = ref_policy.get_variables()[0].name[0:ref_policy.get_variables()[0].name.find('/')]
-        orig_scope = list(ref_policy_params.keys())[0][0:list(ref_policy_params.keys())[0].find('/')]
-        vars = ref_policy.get_variables()
-
-        for i in range(len(ref_policy.get_variables())):
-            assign_op = ref_policy.get_variables()[i].assign(
-                ref_policy_params[ref_policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
-            sess.run(assign_op)
-
-        env.env.ref_policy = ref_policy'''
-
-
-        #init_q, init_dq = joblib.load('data/skel_data/init_states.pkl')
-        #env.env.init_qs = init_q
-        #env.env.init_dqs = init_dq
-
-    print('===================')
-
-    o = env_wrapper.reset()
-
-    rew = 0
-
-    actions = []
-
-    traj = 1
-    ct = 0
-    vel_rew = []
-    action_pen = []
-    deviation_pen = []
-    ref_rewards = []
-    ref_feat_rew = []
-    rew_seq = []
-    com_z = []
-    x_vel = []
-    foot_contacts = []
-    contact_force = []
-    avg_vels = []
-    d=False
-    step = 0
-
-    save_qs = []
-    save_dqs = []
-    save_init_state = False
-
-    while ct < traj:
-        if policy is not None:
-            ac, vpred = policy.act(False, o)
-            act = ac
-        else:
-            act = env.action_space.sample()
-        actions.append(act)
-
-        '''if env_wrapper.env.env.t > 3.0 and env_wrapper.env.env.t < 6.0:
-            env_wrapper.env.env.robot_skeleton.bodynode('head').add_ext_force(np.array([-200, 0, 0]))'''
-        o, r, d, env_info = env_wrapper.step(act)
-
-        if 'action_pen' in env_info:
-            action_pen.append(env_info['action_pen'])
-        if 'vel_rew' in env_info:
-            vel_rew.append(env_info['vel_rew'])
-        rew_seq.append(r)
-        if 'deviation_pen' in env_info:
-            deviation_pen.append(env_info['deviation_pen'])
-        if 'contact_force' in env_info:
-            contact_force.append(env_info['contact_force'])
-        if 'ref_reward' in env_info:
-            ref_rewards.append(env_info['ref_reward'])
-        if 'ref_feat_rew' in env_info:
-            ref_feat_rew.append(env_info['ref_feat_rew'])
-        if 'avg_vel' in env_info:
-            avg_vels.append(env_info['avg_vel'])
-
-        com_z.append(o[1])
-        foot_contacts.append(o[-2:])
-
-        rew += r
-
-        env_wrapper.render()
-        step += 1
-
-        #time.sleep(0.1)
-        if len(o) > 25:
-            x_vel.append(env.env.robot_skeleton.dq[0])
-
-        if len(foot_contacts) > 400:
-            if np.random.random() < 0.03:
-                print('q ', np.array2string(env.env.robot_skeleton.q, separator=','))
-                print('dq ', np.array2string(env.env.robot_skeleton.dq, separator=','))
-
-        if np.abs(env.env.t - env.env.tv_endtime) < 0.01:
-            save_qs.append(env.env.robot_skeleton.q)
-            save_dqs.append(env.env.robot_skeleton.dq)
-
-        if d:
-            step = 0
-            if 'contact_locations' in env_info:
-                c_loc = env_info['contact_locations']
-                for j in range(len(c_loc[0]) - 1):
-                    c_loc[0][j] = c_loc[0][j+1] - c_loc[0][j]
-                for j in range(len(c_loc[1]) - 1):
-                    c_loc[1][j] = c_loc[1][j + 1] - c_loc[1][j]
-                print(np.mean(c_loc[0][0:-1], axis=0))
-                print(np.mean(c_loc[1][0:-1], axis=0))
-            ct += 1
-            print('reward: ', rew)
-            o=env_wrapper.reset()
-            #break
-    print('avg rew ', rew / traj)
-
-    if len(save_qs) > 0 and save_init_state:
-        joblib.dump([save_qs, save_dqs], 'data/skel_data/init_states.pkl')
-
-    if sys.argv[1] == 'DartWalker3d-v1' or sys.argv[1] == 'DartWalker3dSPD-v1':
-        rendergroup = [[0,1,2], [3,4,5, 9,10,11], [6,12], [7,8, 12,13]]
-        for rg in rendergroup:
-            plt.figure()
-            for i in rg:
-                plt.plot(np.array(actions)[:, i])
-    if sys.argv[1] == 'DartHumanWalker-v1':
-        rendergroup = [[0,1,2, 6,7,8], [3,9], [4,5,10,11], [12,13,14], [15,16,7,18]]
-        titles = ['thigh', 'knee', 'foot', 'waist', 'arm']
-        for i,rg in enumerate(rendergroup):
-            plt.figure()
-            plt.title(titles[i])
-            for i in rg:
-                plt.plot(np.array(actions)[:, i])
-    if sys.argv[1] == 'DartDogRobot-v1':
-        rendergroup = [[0,1,2], [3, 4,5], [6,7,8],[9,10,11]]
-        titles = ['rear right leg', 'rear left leg', 'front right leg', 'front left leg']
-        for i,rg in enumerate(rendergroup):
-            plt.figure()
-            plt.title(titles[i])
-            for i in rg:
-                plt.plot(np.array(actions)[:, i])
-    if sys.argv[1] == 'DartHexapod-v1':
-        rendergroup = [[0,1,2, 3,4,5], [6,7,8, 9,10,11], [12,13,14, 15,16,17]]
-        titles = ['hind legs', 'middle legs', 'front legs']
-        for i,rg in enumerate(rendergroup):
-            plt.figure()
-            plt.title(titles[i])
-            for i in rg:
-                plt.plot(np.array(actions)[:, i])
-    plt.figure()
-    plt.title('rewards')
-    plt.plot(rew_seq, label='total rew')
-    plt.plot(action_pen, label='action pen')
-    plt.plot(vel_rew, label='vel rew')
-    plt.plot(deviation_pen, label='dev pen')
-    plt.legend()
-    plt.figure()
-    plt.title('com z')
-    plt.plot(com_z)
-    plt.figure()
-    plt.title('x vel')
-    plt.plot(x_vel)
-    foot_contacts = np.array(foot_contacts)
-    plt.figure()
-    plt.title('foot contacts')
-    plt.plot(1-foot_contacts[:, 0])
-    plt.plot(1-foot_contacts[:, 1])
-    plt.figure()
-
-    if len(contact_force) > 0:
-        plt.title('contact_force')
-        plt.plot(np.array(contact_force)[:,0], label='x')
-        plt.plot(np.array(contact_force)[:,1], label='y')
-        plt.plot(np.array(contact_force)[:,2], label='z')
-        plt.legend()
-    plt.figure()
-    plt.title('ref_rewards')
-    plt.plot(ref_rewards)
-    plt.figure()
-    plt.title('ref_feat_rew')
-    plt.plot(ref_feat_rew)
-    plt.figure()
-    plt.title('average velocity')
-    plt.plot(avg_vels)
-    print('total ref rewards ', np.sum(ref_rewards))
-    print('total vel rewrads ', np.sum(vel_rew))
-    print('total action rewards ', np.sum(action_pen))
-    plt.show()
-
-
-
-
-
+    main()

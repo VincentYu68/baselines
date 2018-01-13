@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(False, o)
+            ac, vpred = policy.act(True, o)
             act = ac
         else:
             act = env.action_space.sample()

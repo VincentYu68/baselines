@@ -33,12 +33,14 @@ def train_mirror(env_id, num_timesteps, seed):
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, 9, 10, 11, 12, 5, 6, 7, 8, 16, 17, 18, 13,
-                                                      14, 15,
-                                                      19, 20, -21, 22, -23, -24, 29, 30, 31, 32, 25, 26, 27, 28, 36, 37,
-                                                      38, 33, 34, 35, 40, 39, 42, 41, 43]),
+                                                     [0.0001, -1, 2, -3, -4, 9, 10, 11, 12, 5, 6, 7, 8, 17, 18, 19, 20,
+                                                      13,
+                                                      14, 15, 16,
+                                                      21, 22, -23, 24, -25, -26, 31, 32, 33, 34, 27, 28, 29, 30, 39, 40,
+                                                      41,
+                                                      42, 35, 36, 37, 38, 44, 43, 46, 45, 47]),
                                                  action_permutation=np.array(
-                                                     [4, 5, 6, 7, 0.0001, 1, 2, 3, 11, 12, 13, 8, 9, 10]),
+                                                     [4, 5, 6, 7, 0.0001, 1, 2, 3, 12, 13, 14, 15, 8, 9, 10, 11]),
                                                  )
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
@@ -66,7 +68,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy3_vel2_2s_mirror_velrew3_dcon1_asinput_damping2_velspd1000_newleg_halfpalm_newstrength1x')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy2_vel2_1s_mirror_velrew3_dcon1_asinput_damping5_oldinitjoint_newnewstrength15x_05fwdpen_01velpentransition_ab3_matchedseed')
     #logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy05_bal_vel4smooth_mirror_up1fwd01ltl1_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcontrolconstraint1_strongerarm_asinput_treadmill')
     train_mirror(args.env, num_timesteps=int(5000*4*3000), seed=args.seed)
 

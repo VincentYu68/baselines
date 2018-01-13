@@ -7,8 +7,6 @@ from baselines import logger
 import sys
 import joblib
 import tensorflow as tf
-
-
 import numpy as np
 from mpi4py import MPI
 import os, errno

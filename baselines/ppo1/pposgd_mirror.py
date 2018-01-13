@@ -24,6 +24,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
     rews = np.zeros(horizon, 'float32')
     pos_rews = np.zeros(horizon, 'float32')
     neg_pens = np.zeros(horizon, 'float32')
+    avg_vels = np.zeros(horizon, 'float32')
     vpreds = np.zeros(horizon, 'float32')
     news = np.zeros(horizon, 'int32')
     acs = np.array([ac for _ in range(horizon)])
@@ -39,7 +40,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         if t > 0 and t % horizon == 0:
             yield {"ob" : obs, "rew" : rews, "vpred" : vpreds, "new" : news,
                     "ac" : acs, "prevac" : prevacs, "nextvpred": vpred * (1 - new),
-                    "ep_rets" : ep_rets, "ep_lens" : ep_lens, "pos_rews" : pos_rews, "neg_pens": neg_pens}
+                    "ep_rets" : ep_rets, "ep_lens" : ep_lens, "pos_rews" : pos_rews, "neg_pens": neg_pens, "avg_vels":avg_vels}
             # Be careful!!! if you change the downstream algorithm to aggregate
             # several of these batches, then be sure to do a deepcopy
             ep_rets = []
@@ -56,6 +57,8 @@ def traj_segment_generator(pi, env, horizon, stochastic):
             pos_rews[i] = envinfo["pos_rew"]
         if "neg_pen" in envinfo:
             neg_pens[i] = envinfo["neg_pen"]
+        if "avg_vel" in envinfo:
+            avg_vels[i] = envinfo["avg_vel"]
         rews[i] = rew
 
         cur_ep_ret += rew
@@ -109,7 +112,8 @@ def learn(env, policy_func, *,
         positive_rew_enforce = False,
         reward_drop_bound = None,
         min_iters = 0,
-        ref_policy_params = None
+        ref_policy_params = None,
+         rollout_length_thershold = None 
         ):
 
     # Setup losses and stuff
@@ -322,15 +326,29 @@ def learn(env, policy_func, *,
                 logger.record_tabular("RewardAdjustRatio", adjust_ratio)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
-        if return_threshold is not None and max_thres_satisfied:
-            if np.mean(rewbuffer) > return_threshold and iters_so_far > min_iters:
-                break
+
         if max_threshold is not None:
             print('Current max return: ', np.max(rewbuffer))
             if np.max(rewbuffer) > max_threshold:
                 max_thres_satisfied = True
             else:
                 max_thres_satisfied = False
+
+        return_threshold_satisfied = True
+        if return_threshold is not None:
+            if not(np.mean(rewbuffer) > return_threshold and iters_so_far > min_iters):
+                return_threshold_satisfied = False
+        rollout_length_thershold_satisfied = True
+        if rollout_length_thershold is not None:
+            rewlocal = (seg["avg_vels"], seg["rew"])  # local values
+            listofrews = MPI.COMM_WORLD.allgather(rewlocal)  # list of tuples
+            avg_vels, rews = map(flatten_lists, zip(*listofrews))
+            if not(np.mean(lenbuffer) > rollout_length_thershold and np.mean(avg_vels) > 0.5 * env.env.env.final_tv):
+                rollout_length_thershold_satisfied = False
+        if rollout_length_thershold is not None or return_threshold is not None:
+            if rollout_length_thershold_satisfied and return_threshold_satisfied:
+                break
+
     return pi, np.mean(rewbuffer)
 
 def flatten_lists(listoflists):

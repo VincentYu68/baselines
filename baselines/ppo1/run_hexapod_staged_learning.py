@@ -7,8 +7,6 @@ from baselines import logger
 import sys
 import joblib
 import tensorflow as tf
-
-
 import numpy as np
 from mpi4py import MPI
 import os, errno
@@ -41,14 +39,14 @@ def train_mirror(env_id, num_timesteps, seed):
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, -11, 12, -13, 14, 15, 16, -5, 6, -7, 8, 9,
-                                                      10, -17, 18, -19, -24, 25, -26, 27, -20, 21, -22, 23, \
-                                                      28, 29, -30, 31, -32, -33, -40, 41, -42, 43, 44, 45, -34, 35, -36,
-                                                      37, 38, 39, -46, 47, -48, -53, 54, -55, 56, -49, 50, -51, 52, 58,
-                                                      57, 59]),
+                                                     [0.0001, -1, 2, -3, -4, 8, 9, 10, 5, 6, 7, 14, 15, 16, 11, 12, 13,
+                                                      20, 21, 22, 17, 18, 19,
+                                                      23, 24, -25, 26, -27, -28, 32, 33, 34, 29, 30, 31, 38, 39, 40, 35,
+                                                      36, 37, 44, 45, 46, 41, 42, 43,
+                                                      48, 47, 50, 49, 52, 51, 53]),
                                                  action_permutation=np.array(
-                                                     [-6, 7, -8, 9, 10, 11, -0.001, 1, -2, 3, 4, 5, -12, 13, -14, -19,
-                                                      20, -21, 22, -15, 16, -17, 18]))
+                                                     [3, 4, 5, 0.0001, 1, 2, 9, 10, 11, 6, 7, 8, 15, 16, 17, 12, 13,
+                                                      14]))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
     env.seed(seed+MPI.COMM_WORLD.Get_rank())
@@ -64,7 +62,6 @@ def train_mirror(env_id, num_timesteps, seed):
 
     joblib.dump(str(env.env.env.__dict__), logger.get_dir() + '/env_specs.pkl', compress=True)
 
-    reward_threshold = None
     while True:
         if not last_iter:
             rollout_length_thershold = env.env.env.assist_schedule[2][0] / env.env.env.dt
@@ -83,12 +80,7 @@ def train_mirror(env_id, num_timesteps, seed):
                 reward_drop_bound=True,
                 rollout_length_thershold = rollout_length_thershold,
                 policy_scope='pi' + str(iter_num),
-                return_threshold = reward_threshold,
             )
-        if iter_num == 0:
-            reward_threshold = 0.7 * rew
-        if last_iter:
-            reward_threshold = None
         iter_num += 1
 
         opt_variable = opt_pi.get_variables()
@@ -120,11 +112,11 @@ def train_mirror(env_id, num_timesteps, seed):
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
+    parser.add_argument('--env', help='environment ID', default='DartHexapod-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_ab4_norotpen_dofpen081515_rew01xinit_thigh160_50springankle_stagedcurriculum_075reduce_07rewthres')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_rew01xinit_thigh200_100springankle_stagedcurriculum')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

@@ -49,6 +49,7 @@ def train_mirror(env_id, num_timesteps, seed):
     U.make_session(num_cpu=1).__enter__()
     set_global_seeds(seed)
     env = gym.make(env_id)
+    joblib.dump(str(env.env.__dict__), logger.get_dir() + '/env_specs.pkl', compress=True)
     def policy_fn(name, ob_space, ac_space):
         return mlp_mirror_policy.MlpMirrorPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
@@ -74,9 +75,8 @@ def train_mirror(env_id, num_timesteps, seed):
             callback=callback,
             sym_loss_weight=4.0,
             positive_rew_enforce=False,
-            #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1156_energy1_vel55_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg4_dcontrolconstraint1_asinput_damping2kneethigh_thigh250knee60/policy_params.pkl'),
+            init_policy_params = joblib.load('data/ppo_DartWalker3d-v119_energy03_vel4_3s_mirror4_velrew3_damping5_anklesprint100_5_rotpen0_rew01xinit_stagedcurriculum4s75s34ratio/policy_params.pkl'),
             reward_drop_bound=True,
-            #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1124_energy25_vel3_kd1000_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd500/policy_params.pkl')
         )
     env.close()
 
@@ -87,7 +87,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy04_vel15_mirror4_velrew3_asinput_damping5_contactpen02_1kmaxquad_curriculum')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel4_3s_mirror4_velrew3_asinput_damping5_torque1x_anklesprint100_5_rotpen01_rew01xinit_contfromstage')
     train_mirror(args.env, num_timesteps=int(5000*4*2500), seed=args.seed)
 
 

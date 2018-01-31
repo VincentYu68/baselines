@@ -39,13 +39,13 @@ def train_mirror(env_id, num_timesteps, seed):
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [0.0001, -1, 2, -3, -4, -5, -6, 7, 14, -15, -16, 17, 18, -19, 8,
-                                                      -9, -10, 11, 12, -13,
-                                                      20, 21, -22, 23, -24, -25, -26, -27, 28, 35, -36, -37, 38, 39,
-                                                      -40, 29, -30, -31, 32, 33,
-                                                      -34, 42, 41, 43]),
+            [0.0001, -1, 2, -3, -4, -5, -6, 7, 14, -15, -16, 17, 18, -19, 8,
+             -9, -10, 11, 12, -13,
+             20, 21, -22, 23, -24, -25, -26, -27, 28, 35, -36, -37, 38, 39,
+             -40, 29, -30, -31, 32, 33,
+             -34, 42, 41, 43]),
                                                  action_permutation=np.array(
-                                                     [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
+            [-0.0001, -1, 2, 9, -10, -11, 12, 13, -14, 3, -4, -5, 6, 7, -8]))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"), allow_early_resets=True)
     env.seed(seed+MPI.COMM_WORLD.Get_rank())
@@ -61,6 +61,7 @@ def train_mirror(env_id, num_timesteps, seed):
  
     joblib.dump(str(env.env.env.__dict__), logger.get_dir() + '/env_specs.pkl', compress=True)
 
+    reward_threshold = None
     while True:
         if not last_iter:
             rollout_length_threshold = env.env.env.assist_schedule[2][0] / env.env.env.dt
@@ -79,7 +80,12 @@ def train_mirror(env_id, num_timesteps, seed):
                 reward_drop_bound=True,
                 rollout_length_thershold = rollout_length_threshold,
                 policy_scope='pi' + str(iter_num),
+                return_threshold=reward_threshold,
             )
+        if iter_num == 0:
+            reward_threshold = 0.7 * rew
+        if last_iter:
+            reward_threshold = None
         iter_num += 1
 
         opt_variable = opt_pi.get_variables()
@@ -117,7 +123,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel4_3s_mirror4_velrew3_damping5_anklesprint100_5_rotpen0_rew01xinit_stagedcurriculum4s75s34ratio')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy04_vel1_1s_mirror4_velrew3_ab4_anklesprint100_5_rotpen0_rew05xinit_stagedcurriculum4s75s34ratio')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

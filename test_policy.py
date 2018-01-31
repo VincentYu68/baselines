@@ -4,7 +4,7 @@ import gym
 from baselines.common import set_global_seeds, tf_util as U
 from baselines import bench
 import os.path as osp
-import sys, os, time
+import sys, os, time, errno
 
 import joblib
 import numpy as np
@@ -14,6 +14,8 @@ from gym import wrappers
 import tensorflow as tf
 from baselines.ppo1 import mlp_policy, pposgd_simple
 import baselines.common.tf_util as U
+import pydart2.utils.transformations as trans
+import json
 
 np.random.seed(1)
 
@@ -21,7 +23,52 @@ def policy_fn(name, ob_space, ac_space):
     return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
                                 hid_size=64, num_hid_layers=3, gmm_comp=1)
 
+def save_one_frame_shape(env, fpath, step):
+    robo_skel = env.env.robot_skeleton
+    data = []
+    for b in robo_skel.bodynodes:
+        if len(b.shapenodes) == 0:
+            continue
+        if 'cover' in b.name:
+            continue
+        shape_transform = b.T.dot(b.shapenodes[0].relative_transform()).tolist()
+        #pos = trans.translation_from_matrix(shape_transform)
+        #rot = trans.euler_from_matrix(shape_transform)
+        shape_class = str(type(b.shapenodes[0].shape))
+        if 'Mesh' in shape_class:
+            stype = 'Mesh'
+            path = b.shapenodes[0].shape.path()
+            scale = b.shapenodes[0].shape.scale().tolist()
+            sub_data = [path, scale]
+        elif 'Box' in shape_class:
+            stype = 'Box'
+            sub_data = b.shapenodes[0].shape.size().tolist()
+        elif 'Ellipsoid' in shape_class:
+            stype = 'Ellipsoid'
+            sub_data = b.shapenodes[0].shape.size().tolist()
+        elif 'MultiSphere' in shape_class:
+            stype = 'MultiSphere'
+            sub_data = b.shapenodes[0].shape.spheres()
+            for s in range(len(sub_data)):
+                sub_data[s]['pos'] = sub_data[s]['pos'].tolist()
+
+        data.append([stype, b.name, shape_transform, sub_data])
+    file = fpath + '/frame_' + str(step)+'.txt'
+    json.dump(data, open(file, 'w'))
+
+
 if __name__ == '__main__':
+    save_render_data = False
+    interpolate = 0
+    prev_state = None
+    render_step = 0
+    render_path = 'render_data/' + 'humanoid_walk222'
+    try:
+        os.makedirs(render_path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
     if len(sys.argv) > 1:
         env = gym.make(sys.argv[1])
     else:
@@ -105,6 +152,7 @@ if __name__ == '__main__':
     x_vel = []
     foot_contacts = []
     contact_force = []
+    both_contact_forces = []
     avg_vels = []
     d=False
     step = 0
@@ -115,7 +163,7 @@ if __name__ == '__main__':
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(step<100, o)
+            ac, vpred = policy.act(step<0, o)
             act = ac
         else:
             act = env.action_space.sample()
@@ -134,6 +182,8 @@ if __name__ == '__main__':
             deviation_pen.append(env_info['deviation_pen'])
         if 'contact_force' in env_info:
             contact_force.append(env_info['contact_force'])
+        if 'contact_forces' in env_info:
+            both_contact_forces.append(env_info['contact_forces'])
         if 'ref_reward' in env_info:
             ref_rewards.append(env_info['ref_reward'])
         if 'ref_feat_rew' in env_info:
@@ -158,9 +208,22 @@ if __name__ == '__main__':
                 print('q ', np.array2string(env.env.robot_skeleton.q, separator=','))
                 print('dq ', np.array2string(env.env.robot_skeleton.dq, separator=','))
 
-        if np.abs(env.env.t - env.env.tv_endtime) < 0.01:
-            save_qs.append(env.env.robot_skeleton.q)
-            save_dqs.append(env.env.robot_skeleton.dq)
+        #if np.abs(env.env.t - env.env.tv_endtime) < 0.01:
+        #    save_qs.append(env.env.robot_skeleton.q)
+        #    save_dqs.append(env.env.robot_skeleton.dq)
+
+        if save_render_data:
+            cur_state = env.env.state_vector()
+            if prev_state is not None and interpolate > 0:
+                for it in range(interpolate):
+                    int_state = (it+1)*1.0/(interpolate+1) * prev_state + (1-(it+1)*1.0/(interpolate+1)) * cur_state
+                    env.env.set_state_vector(int_state)
+                    save_one_frame_shape(env, render_path, render_step)
+                    render_step += 1
+            env.env.set_state_vector(cur_state)
+            save_one_frame_shape(env, render_path, render_step)
+            render_step += 1
+            prev_state = env.env.state_vector()
 
         if d:
             step = 0
@@ -177,6 +240,17 @@ if __name__ == '__main__':
             o=env_wrapper.reset()
             #break
     print('avg rew ', rew / traj)
+    print('total energy penalty: ', np.sum(action_pen)/traj)
+    print('total vel rew: ', np.sum(vel_rew)/traj)
+
+    if 'Walker' in sys.argv[1]: # measure SI for biped
+        l_contact_total = 0
+        r_contact_total = 0
+        for i in range(len(actions)):
+            l_contact_total += np.linalg.norm(actions[i][[0,1,2,3,4,5]])
+            r_contact_total += np.linalg.norm(actions[i][[6,7,8,9,10,11]])
+        print('total forces: ', l_contact_total, r_contact_total)
+        print('SI: ', 2*(l_contact_total-r_contact_total)/(l_contact_total+r_contact_total))
 
     if len(save_qs) > 0 and save_init_state:
         joblib.dump([save_qs, save_dqs], 'data/skel_data/init_states.pkl')
@@ -249,6 +323,13 @@ if __name__ == '__main__':
     print('total ref rewards ', np.sum(ref_rewards))
     print('total vel rewrads ', np.sum(vel_rew))
     print('total action rewards ', np.sum(action_pen))
+
+
+    ################ save average action signals #################
+    avg_action = np.mean(np.abs(actions), axis=1)
+    np.savetxt('data/force_data/action_mean.txt', avg_action)
+    np.savetxt('data/force_data/action_std.txt', np.std(np.abs(actions), axis=1))
+
     plt.show()
 
 

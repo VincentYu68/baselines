@@ -73,9 +73,9 @@ def train_mirror(env_id, num_timesteps, seed):
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
             callback=callback,
-            sym_loss_weight=4.0,
+            sym_loss_weight=0.0,
             positive_rew_enforce=False,
-            init_policy_params = joblib.load('data/ppo_DartWalker3d-v119_energy03_vel4_3s_mirror4_velrew3_damping5_anklesprint100_5_rotpen0_rew01xinit_stagedcurriculum4s75s34ratio/policy_params.pkl'),
+            #init_policy_params = joblib.load('data/ppo_DartWalker3d-v119_energy03_vel4_3s_mirror4_velrew3_damping5_anklesprint100_5_rotpen0_rew01xinit_stagedcurriculum4s75s34ratio/policy_params.pkl'),
             reward_drop_bound=True,
         )
     env.close()
@@ -87,7 +87,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel4_3s_mirror4_velrew3_asinput_damping5_torque1x_anklesprint100_5_rotpen01_rew01xinit_contfromstage')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel5_3s_mirror0_velrew3_asinput_damping5_ab7_torque1x_anklesprint100_5_rotpen01_rew01xinit')
     train_mirror(args.env, num_timesteps=int(5000*4*2500), seed=args.seed)
 
 

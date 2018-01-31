@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_15s_mirror4_velrew3_ab4_norotpen_dofpen081515_rew01xinit_thigh160_50springankle_stagedcurriculum_075reduce_07rewthres')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_1s_mirror4_velrew3_ab6_norotpen_dofpen11508_rew05xinit_thigh160_50springankle_1p2term_stagedcurriculum_075reduce_07rewthres_2kassist')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

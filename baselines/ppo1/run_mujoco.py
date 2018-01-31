@@ -78,9 +78,9 @@ def train_mirror(env_id, num_timesteps, seed):
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
             callback=callback,
-            sym_loss_weight=4.0,
+            sym_loss_weight=0.0,
             positive_rew_enforce=False,
-            init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1333_energy03_vel2_2s_mirror4_velrew3_adaptalivebonus_rew1xinit_thigh160_100springankle_stagedcurriculum_05reduce_07rewthres/policy_params.pkl'),
+            #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1333_energy03_vel2_2s_mirror4_velrew3_adaptalivebonus_rew1xinit_thigh160_100springankle_stagedcurriculum_05reduce_07rewthres/policy_params.pkl'),
             reward_drop_bound=True,
             ref_policy_params = ref_policy_params,
             #init_policy_params = joblib.load('data/ppo_DartHumanWalker-v1124_energy25_vel3_kd1000_mirror_up1fwd01ltl15_spinepen1yaw001_thighyawpen005_initbentelbow_runningavg3_dcontrolconstraint1_asinput_damping2_fromvel3_kd500/policy_params.pkl')
@@ -90,13 +90,13 @@ def train_mirror(env_id, num_timesteps, seed):
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='DartHopper-v1')
+    parser.add_argument('--env', help='environment ID', default='DartHumanWalker-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy3_vel2_2s_mirror4_up03fwd03ltl15_spinepen1yaw001_thighyawpen005_velrewavg3_2s_dcon1_damping2kneethigh_thigh160knee100waist150_shoulder100_dqpen0_anklespring100_velrew1xinit_contfromstagelearning')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_1s_mirror0_up03fwd03ltl15_spinepen1yaw001_ab3_thighyawpen005_velrewavg3_2s_dcon1_damping2kneethigh_thigh160knee100waist150_shoulder100_velrew15xinit_baseline')
     #logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy05_bal_vel4smooth_mirror_up1fwd01ltl1_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcontrolconstraint1_strongerarm_asinput_treadmill')
-    train_mirror(args.env, num_timesteps=int(5000*4*3000), seed=args.seed)
+    train_mirror(args.env, num_timesteps=int(5000*4*2500), seed=args.seed)
 
 if __name__ == '__main__':
     main()

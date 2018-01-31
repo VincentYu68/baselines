@@ -33,8 +33,14 @@ if __name__ == '__main__':
                 all_len[i].append([])
                 for line in data:
                     pline = json.loads(line.strip())
-                    all_data[i][-1].append(pline['EpRewMean'])
-                    all_len[i][-1].append(pline['EpLenMean'])
+                    if 'EpRewMean' in pline:
+                        all_data[i][-1].append(pline['EpRewMean'])
+                    elif 'rollout/return' in pline:
+                        all_data[i][-1].append(pline['rollout/return'])
+                    else:
+                        print('No return data available')
+                    if 'EpLenMean' in pline:
+                        all_len[i][-1].append(pline['EpLenMean'])
 
     colors = ['r','g','b','c','y']
     plt.figure()

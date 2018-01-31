@@ -7,6 +7,7 @@ from baselines.common.mpi_adam import MpiAdam
 from baselines.common.mpi_moments import mpi_moments
 from mpi4py import MPI
 from collections import deque
+from baselines.valueiteration.value_iteration_learn import *
 
 def traj_segment_generator(pi, env, horizon, stochastic):
     t = 0
@@ -27,6 +28,9 @@ def traj_segment_generator(pi, env, horizon, stochastic):
     vpreds = np.zeros(horizon, 'float32')
     news = np.zeros(horizon, 'int32')
     acs = np.array([ac for _ in range(horizon)])
+    collected_transitions = [[] for _ in range(horizon)]
+    s = np.array(env.env.env.state_vector())
+    after_states = [s for _ in range(horizon)]
     prevacs = acs.copy()
 
     while True:
@@ -37,9 +41,10 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         # before returning segment [0, T-1] so we get the correct
         # terminal value
         if t > 0 and t % horizon == 0:
-            yield {"ob" : obs, "rew" : rews, "vpred" : vpreds, "new" : news,
-                    "ac" : acs, "prevac" : prevacs, "nextvpred": vpred * (1 - new),
-                    "ep_rets" : ep_rets, "ep_lens" : ep_lens, "pos_rews" : pos_rews, "neg_pens": neg_pens}
+            yield {"ob" : obs, "rew" : rews, "vpred" : vpreds, "collected_transitions":collected_transitions,
+                   "new" : news, "ac" : acs, "prevac" : prevacs, "nextvpred": vpred * (1 - new),
+                    "ep_rets" : ep_rets, "ep_lens" : ep_lens, "pos_rews" : pos_rews, "neg_pens" : neg_pens,
+                   "after_states" : after_states}
             # Be careful!!! if you change the downstream algorithm to aggregate
             # several of these batches, then be sure to do a deepcopy
             ep_rets = []
@@ -51,7 +56,15 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         acs[i] = ac
         prevacs[i] = prevac
 
+        s_before = env.env.env.state_vector()
+
         ob, rew, new, envinfo = env.step(ac)
+
+        s_after = env.env.env.state_vector()
+
+        collected_transitions[i] = [s_before, ac, s_after, rew]
+        after_states[i] = s_after
+
         if "pos_rew" in envinfo:
             pos_rews[i] = envinfo["pos_rew"]
         if "neg_pen" in envinfo:
@@ -107,9 +120,10 @@ def learn(env, policy_func, *,
         policy_scope=None,
         max_threshold=None,
         positive_rew_enforce = False,
-        reward_drop_bound = None,
+        reward_drop_bound = True,
         min_iters = 0,
-        ref_policy_params = None
+        ref_policy_params = None,
+        discrete_learning = None # [obs_disc, act_disc, state_filter_fn, state_unfilter_fn, weight]
         ):
 
     # Setup losses and stuff
@@ -202,6 +216,8 @@ def learn(env, policy_func, *,
         cur_val = variables[i].eval()
         revert_parameters[variables[i].name] = cur_val
     revert_data = [0, 0, 0]
+    all_collected_transition_data = []
+    Vfunc = {}
     while True:
         if callback: callback(locals(), globals())
         if max_timesteps and timesteps_so_far >= max_timesteps:
@@ -269,6 +285,24 @@ def learn(env, policy_func, *,
                         print('Reward wrong!')
                         abc
                     seg["rew"][i] = seg["pos_rews"][i] + seg["neg_pens"][i] * adjust_ratio
+        if discrete_learning is not None:
+            rewlocal = (seg["collected_transitions"], seg["rew"])  # local values
+            listofrews = MPI.COMM_WORLD.allgather(rewlocal)  # list of tuples
+            collected_transitions, rews = map(flatten_lists, zip(*listofrews))
+            processed_transitions = []
+            for trans in collected_transitions:
+                processed_transitions.append([discrete_learning[2](trans[0]), trans[1], discrete_learning[2](trans[2]), trans[3]])
+            all_collected_transition_data += processed_transitions
+            if len(all_collected_transition_data) > 500000:
+                all_collected_transition_data = all_collected_transition_data[0:500000]
+            logger.log("Fitting discrete dynamic model...")
+            dyn_model, obs_disc = fit_dyn_model(discrete_learning[0], discrete_learning[1], all_collected_transition_data)
+            logger.log("Perform value iteration on the discrete dynamic model...")
+            Vfunc, policy = optimize_policy(dyn_model, 0.99, Vfunc)
+            discrete_learning[0] = obs_disc
+            for i in range(len(seg["rew"])):
+                seg["rew"][i] += Vfunc[discrete_learning[0](discrete_learning[2](seg["after_states"][i]))] * discrete_learning[4]
+
         add_vtarg_and_adv(seg, gamma, lam)
 
         # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))

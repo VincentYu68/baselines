@@ -51,7 +51,10 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         ob, rew, new, envinfo = env.step(ac)
         rews[i] = rew
 
-        cur_ep_ret += rew
+        if 'sub_disc_ref_reward' in envinfo:
+            cur_ep_ret += rew - envinfo['sub_disc_ref_reward']
+        else:
+            cur_ep_ret += rew
         cur_ep_len += 1
         if new:
             broke = False

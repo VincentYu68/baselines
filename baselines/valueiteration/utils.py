@@ -12,6 +12,9 @@ class bin_disc:
     def __init__(self, disc_scheme):
         self.disc_scheme = disc_scheme # scheme for each dimension is organized as : [size, max, min]
         self.ndim = len(self.disc_scheme)
+        self.bin_num = 1
+        for i in range(self.ndim):
+            self.bin_num *= self.disc_scheme[i][0]
 
     def __call__(self, x):
         assert(len(x) == self.ndim) # dimension must match
@@ -73,5 +76,17 @@ def state_filter_cartpole(s):
     s[1] = s[1] % (2*np.pi)
     return s
 
+def state_unfilter_cartpole(s):
+    return s
+
 def state_filter_hopper(s):
     return s[1:]
+
+def state_unfilter_hopper(s):
+    return np.concatenate([[0],s])
+
+def state_filter_reacher(s):
+    return s
+
+def state_unfilter_reacher(s):
+    return s

@@ -7,10 +7,10 @@ from baselines.common.misc_util import (
     set_global_seeds,
     boolean_flag,
 )
-import baselines.ddpg.training as training
-from baselines.ddpg.models import Actor, Critic
-from baselines.ddpg.memory import Memory
-from baselines.ddpg.noise import *
+import baselines.uddpg.training as training
+from baselines.uddpg.models import Actor, Critic
+from baselines.uddpg.memory import Memory
+from baselines.uddpg.noise import *
 
 import gym
 import tensorflow as tf
@@ -91,13 +91,13 @@ def parse_args():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--critic-l2-reg', type=float, default=1e-2)
     parser.add_argument('--batch-size', type=int, default=64)  # per MPI worker
-    parser.add_argument('--actor-lr', type=float, default=1e-4)
-    parser.add_argument('--critic-lr', type=float, default=1e-3)
+    parser.add_argument('--actor-lr', type=float, default=1e-5)
+    parser.add_argument('--critic-lr', type=float, default=1e-5)
     boolean_flag(parser, 'popart', default=False)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--reward-scale', type=float, default=1.)
     parser.add_argument('--clip-norm', type=float, default=None)
-    parser.add_argument('--nb-epochs', type=int, default=1000)  # with default settings, perform 2M steps total
+    parser.add_argument('--nb-epochs', type=int, default=1000)  # perform 2M steps total
     parser.add_argument('--nb-epoch-cycles', type=int, default=20)
     parser.add_argument('--nb-train-steps', type=int, default=50)  # per epoch cycle and MPI worker
     parser.add_argument('--nb-eval-steps', type=int, default=100)  # per epoch cycle and MPI worker
@@ -114,7 +114,7 @@ if __name__ == '__main__':
 
     logger.reset()
     logger.configure('data/ddpg_' + args['env_id'] + str(
-        args['seed']) + '_vanilla')
+        args['seed']) + '_uac')
 
 
     run(**args)

@@ -62,8 +62,6 @@ if __name__ == '__main__':
                 with open(filepath+'/progress.json') as data_file:
                     data = data_file.readlines()
                 for line in data:
-                    if i == 1 and len(one_data) > 1750:
-                        break
                     pline = json.loads(line.strip())
                     one_data.append(pline['EpRewMean'])
         all_data.append(one_data)
@@ -71,8 +69,6 @@ if __name__ == '__main__':
     colors = ['g','r','b','c','y']
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-
-    all_data[0] = np.array(all_data[0]) * 0.94
 
     for sp in range(len(all_data)):
         #if len(all_data[sp]) > 1000:

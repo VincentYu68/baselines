@@ -42,20 +42,25 @@ def train(env_id, num_timesteps, seed):
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [1]*11),
+                                                     [1]*2),
                                                  action_permutation=np.array(
-                                                     [1,1,1]))
+                                                     [0.001]*1))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
     gym.logger.setLevel(logging.WARN)
 
-    s_disc = []
+    '''s_disc = []
     for i in range(11):
         s_disc.append([30, 0.0, -0.0])
     obs_disc = bin_disc(s_disc)
     act_disc = bin_disc([[10, 1.01, -1.01], [10, 1.01, -1.01], [10, 1.01, -1.01]])
     state_filter_fn = state_filter_hopper
-    state_unfilter_fn = state_unfilter_hopper
+    state_unfilter_fn = state_unfilter_hopper'''
+
+    obs_disc = bin_disc([[51, 0, -0.01], [51, 0.0, -0.01], [51, 0.0, -0.01], [51, 0.0, -0.01]])
+    act_disc = bin_disc([[100, 1.01, -1.01]])
+    state_filter_fn = state_filter_cartpole
+    state_unfilter_fn = state_unfilter_cartpole
 
     pposgd_disc.learn(env, policy_fn,
             max_timesteps=num_timesteps,
@@ -65,7 +70,8 @@ def train(env_id, num_timesteps, seed):
             gamma=0.99, lam=0.95, schedule='linear',
                         callback=callback,
                       sym_loss_weight = 0.0,
-                      discrete_learning = [obs_disc, act_disc, state_filter_fn, state_unfilter_fn, 0.01],
+                      #ref_policy_params=joblib.load('data/ppo_DartCartPoleSwingUp-v11_vanilla/policy_params.pkl')
+                      #discrete_learning = [obs_disc, act_disc, state_filter_fn, state_unfilter_fn, 0.2],
                         #init_policy_params=joblib.load('data/ppo_DartHopper-v12_vanilla/policy_params.pkl')
         )
     env.close()
@@ -78,9 +84,9 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_disc_learn_2k')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_vf_vanilla_weak_2k')
     #logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy05_bal_vel4smooth_mirror_up1fwd01ltl1_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcontrolconstraint1_strongerarm_asinput_treadmill')
-    train(args.env, num_timesteps=int(5000*4*2500), seed=args.seed)
+    train(args.env, num_timesteps=int(500*4*100), seed=args.seed)
 
 if __name__ == '__main__':
     main()

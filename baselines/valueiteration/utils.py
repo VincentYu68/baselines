@@ -79,6 +79,13 @@ def state_filter_cartpole(s):
 def state_unfilter_cartpole(s):
     return s
 
+def state_filter_pendulum(s):
+    s[0] = s[0] % (2*np.pi)
+    return s
+
+def state_unfilter_pendulum(s):
+    return s
+
 def state_filter_hopper(s):
     return s[1:]
 

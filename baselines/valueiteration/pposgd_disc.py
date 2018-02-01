@@ -57,12 +57,12 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         prevacs[i] = prevac
 
         s_before = env.env.env.state_vector()
-
+        obs_before = np.copy(ob)
         ob, rew, new, envinfo = env.step(ac)
 
         s_after = env.env.env.state_vector()
 
-        collected_transitions[i] = [s_before, ac, s_after, rew]
+        collected_transitions[i] = [s_before, ac, s_after, rew, obs_before, ob]
         after_states[i] = s_after
 
         if "pos_rew" in envinfo:
@@ -190,7 +190,7 @@ def learn(env, policy_func, *,
             assign_op = ref_pi.get_variables()[i].assign(
                 ref_policy_params[ref_pi.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
             U.get_session().run(assign_op)
-        env.env.env.ref_policy = ref_pi
+        #env.env.env.ref_policy = ref_pi
 
     adam.sync()
 
@@ -218,6 +218,13 @@ def learn(env, policy_func, *,
     revert_data = [0, 0, 0]
     all_collected_transition_data = []
     Vfunc = {}
+
+    # temp
+    import joblib
+    path = 'data/value_iter_cartpole_discrete'
+    [Vfunc, obs_disc, act_disc, state_filter_fn, state_unfilter_fn] = joblib.load(
+        path + '/ref_policy_funcs.pkl')
+
     while True:
         if callback: callback(locals(), globals())
         if max_timesteps and timesteps_so_far >= max_timesteps:
@@ -285,6 +292,24 @@ def learn(env, policy_func, *,
                         print('Reward wrong!')
                         abc
                     seg["rew"][i] = seg["pos_rews"][i] + seg["neg_pens"][i] * adjust_ratio
+        if ref_policy_params is not None:
+            rewed = 0
+            for i in range(len(seg["rew"])):
+                #pred_nexvf = np.max([ref_pi.act(False, seg["collected_transitions"][i][5])[1], pi.act(False, seg["collected_transitions"][i][5])[1]])
+                #pred_curvf = np.max([ref_pi.act(False, seg["collected_transitions"][i][4])[1], pi.act(False, seg["collected_transitions"][i][4])[1]])
+
+                if obs_disc(state_filter_fn(seg["collected_transitions"][i][2])) in Vfunc and \
+                        obs_disc(state_filter_fn(seg["collected_transitions"][i][0])) in Vfunc:
+                    pred_nexvf = Vfunc[obs_disc(state_filter_fn(seg["collected_transitions"][i][2]))]
+                    pred_curvf = Vfunc[obs_disc(state_filter_fn(seg["collected_transitions"][i][0]))]
+                    rewed += 1
+                else:
+                    pred_nexvf = 0
+                    pred_curvf = 0
+
+                vf_diff = 0.99 * pred_nexvf - pred_curvf
+                seg["rew"][i] += vf_diff * 0.1
+            print('rewarded for : ', rewed / len(seg["rew"]))
         if discrete_learning is not None:
             rewlocal = (seg["collected_transitions"], seg["rew"])  # local values
             listofrews = MPI.COMM_WORLD.allgather(rewlocal)  # list of tuples
@@ -294,14 +319,22 @@ def learn(env, policy_func, *,
                 processed_transitions.append([discrete_learning[2](trans[0]), trans[1], discrete_learning[2](trans[2]), trans[3]])
             all_collected_transition_data += processed_transitions
             if len(all_collected_transition_data) > 500000:
-                all_collected_transition_data = all_collected_transition_data[0:500000]
-            logger.log("Fitting discrete dynamic model...")
-            dyn_model, obs_disc = fit_dyn_model(discrete_learning[0], discrete_learning[1], all_collected_transition_data)
-            logger.log("Perform value iteration on the discrete dynamic model...")
-            Vfunc, policy = optimize_policy(dyn_model, 0.99, Vfunc)
-            discrete_learning[0] = obs_disc
-            for i in range(len(seg["rew"])):
-                seg["rew"][i] += Vfunc[discrete_learning[0](discrete_learning[2](seg["after_states"][i]))] * discrete_learning[4]
+                all_collected_transition_data = all_collected_transition_data[len(all_collected_transition_data)-500000:]
+            if len(all_collected_transition_data) > 50000:
+                logger.log("Fitting discrete dynamic model...")
+                dyn_model, obs_disc = fit_dyn_model(discrete_learning[0], discrete_learning[1], all_collected_transition_data)
+                logger.log("Perform value iteration on the discrete dynamic model...")
+                Vfunc, policy = optimize_policy(dyn_model, 0.99)
+                discrete_learning[0] = obs_disc
+                rewarded = 0
+                for i in range(len(seg["rew"])):
+                    vf_diff = 0.99*Vfunc[discrete_learning[0](discrete_learning[2](seg["collected_transitions"][i][2]))] - \
+                        Vfunc[discrete_learning[0](discrete_learning[2](seg["collected_transitions"][i][0]))]
+                    seg["rew"][i] += vf_diff * discrete_learning[4]
+                    #if policy[discrete_learning[0](discrete_learning[2](seg["collected_transitions"][i][0]))] == discrete_learning[1](seg["collected_transitions"][i][1]):
+                    #    seg["rew"][i] += 2.0
+                    #    rewarded += 1
+                #logger.log(str(rewarded*1.0/len(seg["rew"])) + ' rewarded')
 
         add_vtarg_and_adv(seg, gamma, lam)
 

@@ -210,7 +210,7 @@ if __name__ == '__main__':
 
         #if np.abs(env.env.t - env.env.tv_endtime) < 0.01:
         #    save_qs.append(env.env.robot_skeleton.q)
-        #    save_dqs.append(env.env.robot_skeleton.dq)
+            save_dqs.append(env.env.robot_skeleton.dq)
 
         if save_render_data:
             cur_state = env.env.state_vector()

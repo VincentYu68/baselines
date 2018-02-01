@@ -8,7 +8,7 @@ def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filte
 
     all_state = []
     traj_num = 0
-    batch_size = 200000
+    batch_size = 5000
     total_rew = 0
     while collected_steps < batch_size:
         d = False
@@ -19,12 +19,12 @@ def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filte
                 act = env.action_space.sample()
             else:
                 if disc_policy:
-                    if np.random.random() < 0.99 and obs_disc(bg_step) in policy and policy[obs_disc(bg_step)] is not None:
+                    if np.random.random() < 0.9 and obs_disc(bg_step) in policy and policy[obs_disc(bg_step)] is not None:
                         act = act_disc.samp_state(policy[obs_disc(bg_step)])
                     else:
                         act = env.action_space.sample()
                 else:
-                    if np.random.random() < 0.8:
+                    if np.random.random() < 1.0:
                         act = policy.act(True, env.env._get_obs())[0]
                     else:
                         act = env.action_space.sample()
@@ -72,12 +72,14 @@ def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filte
         dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])][1] += trans[3]
 
     occurances = []
+    rews = []
     for s in dyn_rwd_model.keys():
         for a in dyn_rwd_model[s].keys():
             occurence = 0
             for sn in dyn_rwd_model[s][a].keys():
                 occurence += dyn_rwd_model[s][a][sn][0]
                 dyn_rwd_model[s][a][sn][1] /= dyn_rwd_model[s][a][sn][0]
+                rews.append(dyn_rwd_model[s][a][sn][1])
             for sn in dyn_rwd_model[s][a].keys():
                 dyn_rwd_model[s][a][sn][0] /= occurence
                 occurances.append(occurence)
@@ -88,6 +90,7 @@ def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filte
     for d in range(obs_disc.ndim):
         total_s *= obs_disc.disc_scheme[d][0]
     print('State Occupancy Percentage: ', len(dyn_rwd_model.keys()) / total_s)
+    print('Rew stat: ', np.mean(rews), np.std(rews), np.min(rews), np.max(rews))
     return dyn_rwd_model, collected_data, obs_disc
 
 
@@ -119,16 +122,19 @@ def fit_dyn_model(obs_disc, act_disc, collected_data):
         dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])][1] += trans[3]
 
     occurances = []
+    rews = []
     for s in dyn_rwd_model.keys():
         for a in dyn_rwd_model[s].keys():
             occurence = 0
             for sn in dyn_rwd_model[s][a].keys():
                 occurence += dyn_rwd_model[s][a][sn][0]
                 dyn_rwd_model[s][a][sn][1] /= dyn_rwd_model[s][a][sn][0]
+                rews.append(dyn_rwd_model[s][a][sn][1])
             for sn in dyn_rwd_model[s][a].keys():
                 dyn_rwd_model[s][a][sn][0] /= occurence
                 occurances.append(occurence)
     print('Occurance stat: ', np.mean(occurances), np.std(occurances), np.min(occurances), np.max(occurances))
+    print('Rew stat: ', np.mean(rews), np.std(rews), np.min(rews), np.max(rews))
 
     total_s = 1
     for d in range(obs_disc.ndim):
@@ -139,7 +145,7 @@ def fit_dyn_model(obs_disc, act_disc, collected_data):
 
 
 def optimize_policy(dyn_rwd_model, gamma, Vfunc = {}):
-    for iter in range(500):
+    for iter in range(1500):
         for s in dyn_rwd_model.keys():
             if s not in Vfunc:
                 Vfunc[s] = 0.0

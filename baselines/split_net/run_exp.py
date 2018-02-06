@@ -25,7 +25,7 @@ def callback(localv, globalv):
         joblib.dump(save_dict, logger.get_dir() + '/policy_params_t'+str(t) + '.pkl', compress=True)
 
 
-def train(env_id, num_timesteps, seed):
+def train(env_id, num_timesteps, seed, split_iter, split_percent):
     from baselines.split_net import mlp_split_policy, pposgd_split
     U.make_session(num_cpu=1).__enter__()
     set_global_seeds(seed)
@@ -43,7 +43,9 @@ def train(env_id, num_timesteps, seed):
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
             gamma=0.99, lam=0.95, schedule='linear',
-                        callback=callback
+                        callback=callback,
+                       split_iter=split_iter,
+                       split_percent=split_percent,
         )
     env.close()
 
@@ -52,10 +54,12 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', help='environment ID', default='DartHopper-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    parser.add_argument('--split_iter', help='iteration number that starts splitting', type=int, default=0)
+    parser.add_argument('--split_percent', help='number of splitted parameters', type=float, default=0.0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_split_2task_adapsplit_forwardbackward_4k')
-    train(args.env, num_timesteps=int(1000*4*10), seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_split_'+str(args.split_iter)+'_'+str(args.split_percent)+'_2task_forwardbackward_8k')
+    train(args.env, num_timesteps=int(2000*4*300), seed=args.seed, split_iter=args.split_iter, split_percent=args.split_percent)
 
 if __name__ == '__main__':
     main()

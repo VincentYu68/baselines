@@ -109,7 +109,9 @@ def learn(env, policy_func, *,
         reward_drop_bound = None,
         min_iters = 0,
         ref_policy_params = None,
-         rollout_length_thershold = None
+        rollout_length_thershold = None,
+        split_iter=0,
+        split_percent=0.0
         ):
 
     # Setup losses and stuff
@@ -316,13 +318,13 @@ def learn(env, policy_func, *,
             for t in range(task_size):
                 datasets[t]._next_id = 0
             logger.log(fmt_row(13, np.mean(losses, axis=0)))
-        if iters_so_far == 50:#iters_so_far % 4 == 0 and iters_so_far >= 10 and iters_so_far < 50:
+        if iters_so_far == split_iter:#iters_so_far % 4 == 0 and iters_so_far >= 10 and iters_so_far < 50:
             logger.log("Split networks ...")
             std_order = np.zeros(np.prod(avg_grad_stds.shape))
             std_order[np.argsort(np.reshape(-avg_grad_stds, np.prod(avg_grad_stds.shape)))] = np.arange(np.prod(avg_grad_stds.shape))
             sorted_stds = np.reshape(std_order, avg_grad_stds.shape)
             # split top 50%
-            split_num = int(0.5 * int(var_num))
+            split_num = int(split_percent * int(var_num))
             splitted = 0
             for sp in range(split_num):
                 split_index = np.argwhere(sorted_stds == sp)[0]

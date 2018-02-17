@@ -117,7 +117,7 @@ def learn(env, policy_func, *,
     ent = pi.pd.entropy()
     meankl = U.mean(kloldnew)
     meanent = U.mean(ent)
-    pol_entpen = (-entcoeff) * meanent
+    pol_entpen = (-entcoeff) * tf.minimum(meanent, 10.0)
 
     ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac)) # pnew / pold
     surr1 = ratio * atarg # surrogate from conservative policy iteration

@@ -40,7 +40,7 @@ class PdType(object):
         raise NotImplementedError
 
     def param_placeholder(self, prepend_shape, name=None):
-        return tf.placeholder(dtype=tf.float32, shape=prepend_shape+self.param_shape(), name=name)
+        return tf.placeholder(dtype=tf.float64, shape=prepend_shape+self.param_shape(), name=name)
     def sample_placeholder(self, prepend_shape, name=None):
         return tf.placeholder(dtype=self.sample_dtype(), shape=prepend_shape+self.sample_shape(), name=name)
 
@@ -83,7 +83,7 @@ class DiagGaussianPdType(PdType):
     def sample_shape(self):
         return [self.size]
     def sample_dtype(self):
-        return tf.float32
+        return tf.float64
 
 class GaussianMixturePdType(PdType):
     def __init__(self, size, comp):
@@ -96,7 +96,7 @@ class GaussianMixturePdType(PdType):
     def sample_shape(self):
         return [self.size]
     def sample_dtype(self):
-        return tf.float32
+        return tf.float64
 
 class BernoulliPdType(PdType):
     def __init__(self, size):
@@ -206,15 +206,23 @@ class DiagGaussianPd(Pd):
         return self.mean
     def neglogp(self, x):
         return 0.5 * U.sum(tf.square((x - self.mean) / self.std), axis=-1) \
-               + 0.5 * np.log(2.0 * np.pi) * tf.to_float(tf.shape(x)[-1]) \
+               + 0.5 * np.log(2.0 * np.pi) * tf.to_double(tf.shape(x)[-1]) \
                + U.sum(self.logstd, axis=-1)
     def kl(self, other):
         assert isinstance(other, DiagGaussianPd)
-        return U.sum(other.logstd - self.logstd + (tf.square(self.std) + tf.square(self.mean - other.mean)) / (2.0 * tf.square(other.std)) - 0.5, axis=-1)
+        old_std = tf.exp(self.logstd)
+        new_std = tf.exp(other.logstd)
+
+        numerator = tf.square(self.mean - other.mean) + \
+                    tf.square(old_std)
+        denominator = 2 * tf.square(new_std)
+        return U.sum(
+            numerator / denominator + other.logstd - self.logstd - 0.5, axis=-1)
+        #return U.sum(other.logstd - self.logstd + (tf.square(self.std) + tf.square(self.mean - other.mean)) / (2.0 * tf.square(other.std)) - 0.5, axis=-1)
     def entropy(self):
         return U.sum(self.logstd + .5 * np.log(2.0 * np.pi * np.e), axis=-1)
     def sample(self):
-        return self.mean + self.std * tf.random_normal(tf.shape(self.mean))
+        return self.mean + self.std * tf.random_normal(tf.shape(self.mean), dtype=tf.float64)
     @classmethod
     def fromflat(cls, flat):
         return cls(flat)
@@ -246,13 +254,20 @@ class GaussianMixturePd(Pd):
     def neglogp(self, x):
         prob = 0
         for i in range(self.comp):
-            prob += self.weights[i] * (tf.exp(-0.5 * U.sum(tf.square((x - self.means[i]) / self.stds[i]), axis=-1)) / U.sum((tf.sqrt(tf.pow(2.0*np.pi,tf.cast(tf.shape(x)[-1], tf.float32)))*self.stds[i])))
+            prob += self.weights[i] * (tf.exp(-0.5 * U.sum(tf.square((x - self.means[i]) / self.stds[i]), axis=-1)) / U.sum((tf.sqrt(tf.pow(2.0*np.pi,tf.cast(tf.shape(x)[-1], tf.float64)))*self.stds[i])))
         return -tf.log(prob)
 
     def kl(self, other):
         return 0.0 # don't use KL divergence for GMM models
-    def entropy(self):
-        return 0.0 # not used as well
+    def entropy(self): # use a lower bound of entropy since analytical solution doesn't exist
+        ent_lb = 0
+        for i in range(self.comp):
+            total_wz = 0
+            for j in range(self.comp):
+                sum_std = tf.sqrt(self.stds[i] ** 2 + self.stds[j] ** 2)
+                total_wz += self.weights[j] * (tf.exp(-0.5 * U.sum(tf.square((self.means[i] - self.means[j]) / sum_std), axis=-1)) / U.sum((tf.sqrt(tf.pow(2.0*np.pi,tf.cast(tf.shape(self.means[i])[-1], tf.float64)))*sum_std)))
+            ent_lb -= self.weights[i] * tf.log(total_wz)
+        return ent_lb
     def sample(self):
         wsamp = tf.multinomial(tf.log(self.weights_vec), 1)
         id = tf.cast(wsamp[0,:], tf.int32)
@@ -270,14 +285,14 @@ class BernoulliPd(Pd):
     def mode(self):
         return tf.round(self.ps)
     def neglogp(self, x):
-        return U.sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits, labels=tf.to_float(x)), axis=-1)
+        return U.sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits, labels=tf.to_double(x)), axis=-1)
     def kl(self, other):
         return U.sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=other.logits, labels=self.ps), axis=-1) - U.sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits, labels=self.ps), axis=-1)
     def entropy(self):
         return U.sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits, labels=self.ps), axis=-1)
     def sample(self):
         u = tf.random_uniform(tf.shape(self.ps))
-        return tf.to_float(math_ops.less(u, self.ps))
+        return tf.to_double(math_ops.less(u, self.ps))
     @classmethod
     def fromflat(cls, flat):
         return cls(flat)

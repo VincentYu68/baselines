@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     actions = []
 
-    traj = 1
+    traj = 30
     ct = 0
     vel_rew = []
     action_pen = []
@@ -163,7 +163,7 @@ if __name__ == '__main__':
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(step<0, o)
+            ac, vpred = policy.act(True, o)
             act = ac
         else:
             act = env.action_space.sample()
@@ -203,14 +203,6 @@ if __name__ == '__main__':
         if len(o) > 25:
             x_vel.append(env.env.robot_skeleton.dq[0])
 
-        if len(foot_contacts) > 400:
-            if np.random.random() < 0.03:
-                print('q ', np.array2string(env.env.robot_skeleton.q, separator=','))
-                print('dq ', np.array2string(env.env.robot_skeleton.dq, separator=','))
-
-        #if np.abs(env.env.t - env.env.tv_endtime) < 0.01:
-        #    save_qs.append(env.env.robot_skeleton.q)
-            save_dqs.append(env.env.robot_skeleton.dq)
 
         if save_render_data:
             cur_state = env.env.state_vector()

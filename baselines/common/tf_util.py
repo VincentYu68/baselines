@@ -134,7 +134,7 @@ class PlacholderTfInput(TfInput):
 
 
 class BatchInput(PlacholderTfInput):
-    def __init__(self, shape, dtype=tf.float32, name=None):
+    def __init__(self, shape, dtype=tf.float64, name=None):
         """Creates a placeholder for a batch of tensors of a given shape and dtype
 
         Parameters
@@ -151,7 +151,7 @@ class BatchInput(PlacholderTfInput):
 
 class Uint8Input(PlacholderTfInput):
     def __init__(self, shape, name=None):
-        """Takes input in uint8 format which is cast to float32 and divided by 255
+        """Takes input in uint8 format which is cast to float64 and divided by 255
         before passing it to the model.
 
         On GPU this ensures lower data transfer times.
@@ -166,7 +166,7 @@ class Uint8Input(PlacholderTfInput):
 
         super().__init__(tf.placeholder(tf.uint8, [None] + list(shape), name=name))
         self._shape = shape
-        self._output = tf.cast(super().get(), tf.float32) / 255.0
+        self._output = tf.cast(super().get(), tf.float64) / 255.0
 
     def get(self):
         return self._output
@@ -285,13 +285,13 @@ def save_state(fname):
 
 def normc_initializer(std=1.0):
     def _initializer(shape, dtype=None, partition_info=None):  # pylint: disable=W0613
-        out = np.random.randn(*shape).astype(np.float32)
+        out = np.random.randn(*shape).astype(np.float64)
         out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
         return tf.constant(out)
     return _initializer
 
 
-def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", dtype=tf.float32, collections=None,
+def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", dtype=tf.float64, collections=None,
            summary_tag=None):
     with tf.variable_scope(name):
         stride_shape = [1, stride[0], stride[1], 1]
@@ -322,10 +322,10 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", 
 
 
 def dense(x, size, name, weight_init=None, bias=True):
-    w = tf.get_variable(name + "/w", [x.get_shape()[1], size], initializer=weight_init)
+    w = tf.get_variable(name + "/w", [x.get_shape()[1], size], initializer=weight_init, dtype=tf.float64)
     ret = tf.matmul(x, w)
     if bias:
-        b = tf.get_variable(name + "/b", [size], initializer=tf.zeros_initializer())
+        b = tf.get_variable(name + "/b", [size], initializer=tf.zeros_initializer(), dtype=tf.float64)
         return ret + b
     else:
         return ret
@@ -626,7 +626,7 @@ def flatgrad(loss, var_list, clip_norm=None):
 
 
 class SetFromFlat(object):
-    def __init__(self, var_list, dtype=tf.float32):
+    def __init__(self, var_list, dtype=tf.float64):
         assigns = []
         shapes = list(map(var_shape, var_list))
         total_size = np.sum([intprod(shape) for shape in shapes])

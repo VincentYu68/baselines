@@ -25,7 +25,7 @@ def callback(localv, globalv):
         joblib.dump(save_dict, logger.get_dir() + '/policy_params_t'+str(t) + '.pkl', compress=True)
 
 
-def train(env_id, num_timesteps, batch, seed, split_iter, split_percent):
+def train(env_id, num_timesteps, batch, seed, split_iter, split_percent, split_interval, adapt_split):
     from baselines.split_net import mlp_split_policy, pposgd_split
     U.make_session(num_cpu=1).__enter__()
     set_global_seeds(seed)
@@ -42,10 +42,12 @@ def train(env_id, num_timesteps, batch, seed, split_iter, split_percent):
             timesteps_per_batch=int(batch),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
-            gamma=0.99, lam=0.95, schedule='linear',
+            gamma=0.99, lam=0.95, schedule='constant',
                         callback=callback,
                        split_iter=split_iter,
                        split_percent=split_percent,
+                       split_interval = split_interval,
+                       adapt_split = adapt_split == 1,
         )
     env.close()
 
@@ -56,11 +58,14 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--split_iter', help='iteration number that starts splitting', type=int, default=0)
     parser.add_argument('--split_percent', help='number of splitted parameters', type=float, default=0.0)
-    parser.add_argument('--batch', help='batch per thread', type=int, default=1000)
+    parser.add_argument('--split_interval', help='number of splitted parameters', type=int, default=10000)
+    parser.add_argument('--adapt_split', help='adaptive split', type=int, default=0)
+    parser.add_argument('--batch', help='batch per thread', type=int, default=2000)
+    parser.add_argument('--expname', help='name of the experiment', type=str, default='')
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_split_'+str(args.split_iter)+'_'+str(args.split_percent)+'_2task_forwardbackward_'+str(args.batch))
-    train(args.env, num_timesteps=int(2000*4*300), batch = args.batch, seed=args.seed, split_iter=args.split_iter, split_percent=args.split_percent)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_split_'+str(args.split_iter)+'_'+str(args.split_percent)+'_'+str(args.split_interval)+'_'+str(args.adapt_split)+args.expname+str(args.batch))
+    train(args.env, num_timesteps=int(10000*900), batch = args.batch, seed=args.seed, split_iter=args.split_iter, split_percent=args.split_percent, split_interval=args.split_interval, adapt_split=args.adapt_split)
 
 if __name__ == '__main__':
     main()

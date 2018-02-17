@@ -14,7 +14,7 @@ class MlpNet(object):
     def _init(self, input, output, hid_size, num_hid_layers):
         sequence_length = None
 
-        ob = U.get_placeholder(name="input", dtype=tf.float32, shape=[sequence_length] + [input,])
+        ob = U.get_placeholder(name="input", dtype=tf.float64, shape=[sequence_length] + [input,])
 
         last_out = ob
         for i in range(num_hid_layers):

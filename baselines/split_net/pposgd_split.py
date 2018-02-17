@@ -23,8 +23,8 @@ def traj_segment_generator(pi, env, horizon, stochastic, task_id):
 
     # Initialize history arrays
     obs = np.array([ob for _ in range(horizon)])
-    rews = np.zeros(horizon, 'float32')
-    vpreds = np.zeros(horizon, 'float32')
+    rews = np.zeros(horizon, 'float64')
+    vpreds = np.zeros(horizon, 'float64')
     news = np.zeros(horizon, 'int32')
     task_ids = np.zeros(horizon, 'int32')
     acs = np.array([ac for _ in range(horizon)])
@@ -82,7 +82,7 @@ def add_vtarg_and_adv(seg, gamma, lam):
     new = np.append(seg["new"], 0) # last element is only used for last vtarg, but we already zeroed it if last new = 1
     vpred = np.append(seg["vpred"], seg["nextvpred"])
     T = len(seg["rew"])
-    seg["adv"] = gaelam = np.empty(T, 'float32')
+    seg["adv"] = gaelam = np.empty(T, 'float64')
     rew = seg["rew"]
     lastgaelam = 0
     for t in reversed(range(T)):
@@ -90,6 +90,37 @@ def add_vtarg_and_adv(seg, gamma, lam):
         delta = rew[t] + gamma * vpred[t+1] * nonterminal - vpred[t]
         gaelam[t] = lastgaelam = delta + gamma * lam * nonterminal * lastgaelam
     seg["tdlamret"] = seg["adv"] + seg["vpred"]
+
+def optimize_one_iter(datasets, lossandgrads, task_adams, optim_epochs, optim_stepsize, task_size, optim_batchsize, cur_lrmult, share_params_list):
+    learning_curve = []
+    for _ in range(optim_epochs):
+        losses = []  # list of tuples, each of which gives the loss for a minibatch
+        while datasets[0]._next_id <= datasets[0].n - optim_batchsize:
+            avg_losses = []
+            for t in range(task_size):
+                batch = datasets[t].next_batch(optim_batchsize)
+                *newlosses, g = lossandgrads[t](batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult)
+                task_adams[t].update(g, optim_stepsize * cur_lrmult)
+                # synchronize the shared parameters
+                for t2 in range(task_size):
+                    if t == t2 or np.sum(share_params_list[t2, :] == share_params_list[t, :]) == 0:
+                        continue
+                    gmask = share_params_list[t2, :] == share_params_list[t, :]
+                    cur_param = task_adams[t2].getflat()
+                    cur_param[gmask] = task_adams[t].getflat()[gmask]
+                    task_adams[t2].setfromflat(cur_param)
+                    task_adams[t2].m[gmask] = task_adams[t].m[gmask]
+                    task_adams[t2].v[gmask] = task_adams[t].v[gmask]
+                avg_losses.append(newlosses)
+            losses.append(np.mean(avg_losses, axis=0))
+
+        for t in range(task_size):
+            datasets[t]._next_id = 0
+            datasets[t].shuffle()
+        learning_curve.append(np.mean(losses, axis=0))
+    return learning_curve
+
+
 
 def learn(env, policy_func, *,
         timesteps_per_batch, # timesteps per actor per update
@@ -106,12 +137,14 @@ def learn(env, policy_func, *,
         policy_scope=None,
         max_threshold=None,
         positive_rew_enforce = False,
-        reward_drop_bound = None,
+        reward_drop_bound = 300,
         min_iters = 0,
         ref_policy_params = None,
         rollout_length_thershold = None,
         split_iter=0,
-        split_percent=0.0
+        split_percent=0.0,
+        split_interval = 1000000,
+        adapt_split = False,
         ):
 
     # Setup losses and stuff
@@ -131,10 +164,10 @@ def learn(env, policy_func, *,
             pis.append(policy_func(policy_scope, ob_space, ac_space))  # Construct network for new policy
             oldpis.append(policy_func("old" + policy_scope, ob_space, ac_space))
 
-    atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
-    ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
+    atarg = tf.placeholder(dtype=tf.float64, shape=[None]) # Target advantage function (if applicable)
+    ret = tf.placeholder(dtype=tf.float64, shape=[None]) # Empirical return
 
-    lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[]) # learning rate multiplier, updated with schedule
+    lrmult = tf.placeholder(name='lrmult', dtype=tf.float64, shape=[]) # learning rate multiplier, updated with schedule
     clip_param = clip_param * lrmult # Annealed cliping parameter epislon
 
     ob = U.get_placeholder_cached(name="ob")
@@ -146,6 +179,8 @@ def learn(env, policy_func, *,
     task_compute_losses = []
     task_adams = []
     lossandgrads = []
+    get_flats = []
+    set_from_flats = []
     for t in range(task_size):
         ratio = tf.exp(pis[t].pd.logp(ac) - oldpis[t].pd.logp(ac)) # pnew / pold
         surr1 = ratio * atarg # surrogate from conservative policy iteration
@@ -163,6 +198,9 @@ def learn(env, policy_func, *,
         task_assign_old_eq_new.append(U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(oldpis[t].get_variables(), pis[t].get_variables())]))
         task_compute_losses.append(U.function([ob, ac, atarg, ret, lrmult], task_losses[-1]))
+
+        get_flats.append(U.GetFlat(var_list))
+        set_from_flats.append(U.SetFromFlat(var_list))
 
     U.initialize()
 
@@ -203,9 +241,20 @@ def learn(env, policy_func, *,
     revert_data = [0, 0, 0]
 
     # list for recording which parameters to share and split
-    var_num = np.sum([np.prod(v.shape) for v in pis[t].get_trainable_variables()])
+    var_num = np.sum([np.prod(v.shape) for v in pis[0].get_trainable_variables()])
     share_params_list = np.zeros((task_size, var_num))
-    #share_params_list[1, :] = 1.0
+
+    vf_var_num = np.sum([np.prod(v.shape) for v in pis[0].get_trainable_variables() if v.name.split("/")[1].startswith("vf")])
+    pol_var_num = var_num - vf_var_num
+
+    vf_share_params_list = np.zeros((task_size, vf_var_num))
+    pol_share_params_list = np.zeros((task_size, pol_var_num))
+    #share_params_list[1, 0:vf_var_num] = 1.0
+    share_params_list[:, 0:vf_var_num] = vf_share_params_list
+    share_params_list[:, vf_var_num:] = pol_share_params_list
+
+    for t in range(task_size):
+        task_assign_old_eq_new[t]()
 
     while True:
         if callback: callback(locals(), globals())
@@ -240,7 +289,7 @@ def learn(env, policy_func, *,
                 rewbuffer.extend(rews)
             revert_iteration = False
             if np.mean(
-                    rewbuffer) < prev_avg_rew - 50:  # detect significant drop in performance, revert to previous iteration
+                    rewbuffer) < prev_avg_rew - reward_drop_bound:  # detect significant drop in performance, revert to previous iteration
                 print("Revert Iteration!!!!!")
                 revert_iteration = True
             else:
@@ -282,64 +331,222 @@ def learn(env, policy_func, *,
 
         # Here we do a bunch of optimization epochs over the data
         avg_grad_stds = np.zeros((task_size, var_num))
+        all_task_grads = np.zeros((task_size, var_num))
         for _ in range(optim_epochs):
             losses = [] # list of tuples, each of which gives the loss for a minibatch
             while datasets[0]._next_id <= datasets[0].n - optim_batchsize:
                 avg_losses = []
-                task_gradients = []
                 for t in range(task_size):
                     batch = datasets[t].next_batch(optim_batchsize)
                     *newlosses, g = lossandgrads[t](batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult)
-                    task_gradients.append(g)
+                    all_task_grads[t, :] += g
+                    task_adams[t].update(g, optim_stepsize * cur_lrmult)
+                    # synchronize the shared parameters
+                    for t2 in range(task_size):
+                        if t == t2 or np.sum(share_params_list[t2,:] == share_params_list[t,:]) == 0:
+                            continue
+                        gmask = share_params_list[t2,:] == share_params_list[t,:]
+                        cur_param = task_adams[t2].getflat()
+                        cur_param[gmask] = task_adams[t].getflat()[gmask]
+                        task_adams[t2].setfromflat(cur_param)
+                        task_adams[t2].m[gmask] = task_adams[t].m[gmask]
+                        task_adams[t2].v[gmask] = task_adams[t].v[gmask]
                     avg_losses.append(newlosses)
-                task_gradients = np.array(task_gradients)
 
-                combined_gradients = np.zeros(task_gradients.shape)
-                for t in range(task_size):
-                    gmask = share_params_list == t
-                    gt = np.tile(np.sum(task_gradients * gmask, axis=0) / np.clip(np.sum(gmask, axis=0), 0.001, task_size+1), (task_size, 1))
-                    combined_gradients += gt * gmask
-
-                # compute grad std
-                localg = task_gradients.astype('float32')
-                globalg = np.zeros_like(localg)
-                MPI.COMM_WORLD.Allreduce(localg, globalg, op=MPI.SUM)
-
-                for t in range(task_size):
-                    gmask = share_params_list == t
-                    masked_gradient = np.ma.masked_array(globalg, mask=(1-gmask))
-                    avg_grad_stds[t, :] += np.ma.std(masked_gradient, axis=0).data
-                #print(combined_gradients[:, 10:15])
-                #print('============')
-                for t in range(task_size):
-                    task_adams[t].update(combined_gradients[t, :], optim_stepsize * cur_lrmult)
                 losses.append(np.mean(avg_losses, axis=0))
 
             for t in range(task_size):
                 datasets[t]._next_id = 0
+                datasets[t].shuffle()
             logger.log(fmt_row(13, np.mean(losses, axis=0)))
-        if iters_so_far == split_iter:#iters_so_far % 4 == 0 and iters_so_far >= 10 and iters_so_far < 50:
+
+        # compute grad std
+        localg = all_task_grads.astype('float64')
+        globalg = np.zeros_like(localg)
+        MPI.COMM_WORLD.Allreduce(localg, globalg, op=MPI.SUM)
+        for t in range(task_size):
+            gmask = share_params_list == t
+            masked_gradient = np.ma.masked_array(globalg, mask=(1 - gmask))
+            avg_grad_stds[t, :] += np.ma.std(masked_gradient, axis=0).data
+
+        if iters_so_far == split_iter or (iters_so_far >= split_iter and iters_so_far % split_interval == 0):#iters_so_far % 4 == 0 and iters_so_far >= 10 and iters_so_far < 50:
             logger.log("Split networks ...")
-            std_order = np.zeros(np.prod(avg_grad_stds.shape))
-            std_order[np.argsort(np.reshape(-avg_grad_stds, np.prod(avg_grad_stds.shape)))] = np.arange(np.prod(avg_grad_stds.shape))
-            sorted_stds = np.reshape(std_order, avg_grad_stds.shape)
-            # split top 50%
-            split_num = int(split_percent * int(var_num))
-            splitted = 0
-            for sp in range(split_num):
-                split_index = np.argwhere(sorted_stds == sp)[0]
-                if share_params_list[split_index[0], split_index[1]] == 1:
-                    print('wrong')
-                    abc
+            if MPI.COMM_WORLD.Get_rank() == 0:
+                print('AVG GRAD STDS ', avg_grad_stds)
 
-                if avg_grad_stds[sorted_stds==sp] > 0:
-                    splitted += 1
-                    # split for all tasks for now
-                    split_index = np.argwhere(sorted_stds==sp)[0]
-                    for t in range(task_size):
-                        share_params_list[t, split_index[1]] = t
+            if adapt_split:
+                avg_grad_stds_vf = avg_grad_stds[:, 0:vf_var_num]
+                avg_grad_stds_pol = avg_grad_stds[:, vf_var_num:]
+                std_order_vf = np.zeros(np.prod(avg_grad_stds_vf.shape))
+                std_order_vf[np.argsort(np.reshape(-avg_grad_stds_vf, np.prod(avg_grad_stds_vf.shape)))] = np.arange(
+                    np.prod(avg_grad_stds_vf.shape))
+                sorted_stds_vf = np.reshape(std_order_vf, avg_grad_stds_vf.shape)
+                std_order_pol = np.zeros(np.prod(avg_grad_stds_pol.shape))
+                std_order_pol[np.argsort(np.reshape(-avg_grad_stds_pol, np.prod(avg_grad_stds_pol.shape)))] = np.arange(
+                    np.prod(avg_grad_stds_pol.shape))
+                sorted_stds_pol = np.reshape(std_order_pol, avg_grad_stds_pol.shape)
+
+                ########## use loss function to estimate the splitting ####################
+                current_split = np.copy(share_params_list)
+                current_split_vf = np.copy(vf_share_params_list)
+                current_split_pol = np.copy(pol_share_params_list)
+                current_params = []
+                current_adam_params = []
+                for p in range(task_size):
+                    current_params.append(get_flats[p]())
+                    current_adam_params.append([np.copy(task_adams[p].m), np.copy(task_adams[p].v)])
+
+                estimated_performances_vf = []
+                split_percents = []
+                # performance of splitting with different percentages
+                split_percents = [0.0, 0.05, 0.1]
+                for spid in range(len(split_percents)):
+                    # split value function
+                    split_num = int(split_percents[spid] * int(vf_var_num))
+                    for sp in range(split_num):
+                        split_index = np.argwhere(sorted_stds_vf == sp)[0]
+                        if avg_grad_stds_vf[sorted_stds_vf == sp] > 0:
+                            # split for all tasks for now
+
+                            split_index = np.argwhere(sorted_stds_vf == sp)[0]
+                            for t in range(task_size):
+                                vf_share_params_list[t, split_index[1]] = t
+                    print('VF Spltting: ', np.sum(vf_share_params_list) * 1.0 / int(vf_var_num))
+                    share_params_list[:, 0:vf_var_num] = vf_share_params_list
+                    learning_curves = optimize_one_iter(datasets, lossandgrads, task_adams, 100, optim_stepsize, task_size, optim_batchsize,
+                                                        cur_lrmult, share_params_list)
+                    #if MPI.COMM_WORLD.Get_rank() == 0:
+                    #    print(spid, learning_curves)
+                    # reset params
+                    share_params_list = np.copy(current_split)
+                    vf_share_params_list = np.copy(current_split_vf)
+                    pol_share_params_list = np.copy(current_split_pol)
+                    for p in range(task_size):
+                        set_from_flats[p](current_params[p])
+                        task_adams[p].m = np.copy(current_adam_params[p][0])
+                        task_adams[p].v = np.copy(current_adam_params[p][1])
+                    estimated_performances_vf.append(np.array(learning_curves)[:, 1])
+                if MPI.COMM_WORLD.Get_rank() == 0:
+                    import matplotlib.pyplot as plt
+                    fig = plt.figure()
+                    for spid in range(len(split_percents)):
+                        plt.plot(np.array(estimated_performances_vf[spid]), label=str(split_percents[spid]))
+                    plt.legend()
+                    plt.savefig(logger.get_dir() + '/lc_' + str(iters_so_far) + '_vf.jpg')
+
+                estimated_performances_pol = []
+                split_percents = []
+                # performance of splitting with different percentages
+                split_percents = [0.0, 0.05, 0.1]
+                for spid in range(len(split_percents)):
+                    # split value function
+                    split_num = int(split_percents[spid] * int(pol_var_num))
+                    for sp in range(split_num):
+                        split_index = np.argwhere(sorted_stds_pol == sp)[0]
+                        if avg_grad_stds_pol[sorted_stds_pol == sp] > 0:
+                            # split for all tasks for now
+                            split_index = np.argwhere(sorted_stds_pol == sp)[0]
+                            for t in range(task_size):
+                                pol_share_params_list[t, split_index[1]] = t
+                    print('POL Spltting: ', np.sum(pol_share_params_list) * 1.0 / int(pol_var_num))
+                    share_params_list[:, vf_var_num:] = pol_share_params_list
+                    learning_curves = optimize_one_iter(datasets, lossandgrads, task_adams, 100, optim_stepsize, task_size,
+                                                        optim_batchsize,
+                                                        cur_lrmult, share_params_list)
+                    #if MPI.COMM_WORLD.Get_rank() == 0:
+                    #    print(spid, learning_curves)
+                    # reset params
+                    share_params_list = np.copy(current_split)
+                    vf_share_params_list = np.copy(current_split_vf)
+                    pol_share_params_list = np.copy(current_split_pol)
+                    for p in range(task_size):
+                        set_from_flats[p](current_params[p])
+                        task_adams[p].m = np.copy(current_adam_params[p][0])
+                        task_adams[p].v = np.copy(current_adam_params[p][1])
+                    estimated_performances_pol.append(np.array(learning_curves)[:, 0])
+
+                if MPI.COMM_WORLD.Get_rank() == 0:
+                    import matplotlib.pyplot as plt
+                    fig = plt.figure()
+                    for spid in range(len(split_percents)):
+                        plt.plot(np.array(estimated_performances_pol[spid]), label=str(split_percents[spid]))
+                    plt.legend()
+                    plt.savefig(logger.get_dir() + '/lc_' + str(iters_so_far) + '_surr.jpg')
+
+            ###########################################################################
+
+            if MPI.COMM_WORLD.Get_rank() == 0:
+                if not adapt_split: # if
+                    std_order = np.zeros(np.prod(avg_grad_stds.shape))
+                    std_order[
+                        np.argsort(np.reshape(-avg_grad_stds, np.prod(avg_grad_stds.shape)))] = np.arange(
+                        np.prod(avg_grad_stds.shape))
+                    sorted_stds = np.reshape(std_order, avg_grad_stds.shape)
+
+                    split_num = int(split_percent * int(var_num))
+                    for sp in range(split_num):
+                        split_index = np.argwhere(sorted_stds == sp)[0]
+                        if share_params_list[split_index[0], split_index[1]] == 1:
+                            print('wrong')
+                            abc
+
+                        if avg_grad_stds[sorted_stds==sp] > 0:
+                            # split for all tasks for now
+                            split_index = np.argwhere(sorted_stds==sp)[0]
+                            for t in range(task_size):
+                                share_params_list[t, split_index[1]] = t
+                else:
+                    # check split vf and pol
+                    baseline_rst_vf = np.mean(estimated_performances_vf[0][0:5]) - np.mean(estimated_performances_vf[0][-5:])
+                    baseline_rst_pol = np.mean(estimated_performances_pol[0][0:5]) - np.mean(estimated_performances_pol[0][-5:])
+                    sp_perf_ratio_vf = []
+                    sp_perf_ratio_pol = []
+                    for spid in range(1, len(split_percents)):
+                        improv_vf = np.mean(estimated_performances_vf[0][0:5]) - np.mean(estimated_performances_vf[spid][-5:])
+                        improv_pol = np.mean(estimated_performances_pol[0][0:5]) - np.mean(estimated_performances_pol[spid][-5:])
+                        sp_perf_ratio_vf.append(np.abs(improv_vf/baseline_rst_vf))
+                        sp_perf_ratio_pol.append(np.abs(improv_pol/baseline_rst_pol))
+                    vf_sp_perc = 0
+                    pol_sp_perc = 0
+                    for id in range(len(sp_perf_ratio_vf)):
+                        if sp_perf_ratio_vf[id] > 1.6:
+                            vf_sp_perc = split_percents[id+1]
+                            break
+                    for id in range(len(sp_perf_ratio_pol)):
+                        if sp_perf_ratio_pol[id] > 1.6:
+                            pol_sp_perc = split_percents[id+1]
+                            break
+
+                    if vf_sp_perc != 0:
+                        print('================= Split VF for ', vf_sp_perc, sp_perf_ratio_vf, ' ==========================')
+                        vf_split_num = int(vf_sp_perc * int(vf_var_num))
+                        for sp in range(vf_split_num):
+                            split_index = np.argwhere(sorted_stds_vf == sp)[0]
+                            if avg_grad_stds_vf[sorted_stds_vf == sp] > 0:
+                                # split for all tasks for now
+                                split_index = np.argwhere(sorted_stds_vf == sp)[0]
+                                for t in range(task_size):
+                                    vf_share_params_list[t, split_index[1]] = t
+                        print('VF Spltting: ', np.sum(vf_share_params_list) * 1.0 / int(vf_var_num))
+                        share_params_list[:, 0:vf_var_num] = vf_share_params_list
+                    if pol_sp_perc != 0:
+                        print('================= Split POL for ', pol_sp_perc, sp_perf_ratio_pol, ' ==========================')
+                        pol_split_num = int(pol_sp_perc * int(pol_var_num))
+                        for sp in range(pol_split_num):
+                            split_index = np.argwhere(sorted_stds_pol == sp)[0]
+                            if avg_grad_stds_pol[sorted_stds_pol == sp] > 0:
+                                # split for all tasks for now
+                                split_index = np.argwhere(sorted_stds_pol == sp)[0]
+                                for t in range(task_size):
+                                    pol_share_params_list[t, split_index[1]] = t
+                        print('POL Spltting: ', np.sum(pol_share_params_list) * 1.0 / int(pol_var_num))
+                        share_params_list[:, vf_var_num:] = pol_share_params_list
+
+            MPI.COMM_WORLD.Bcast(share_params_list, root=0)
+            MPI.COMM_WORLD.Bcast(vf_share_params_list, root=0)
+            MPI.COMM_WORLD.Bcast(pol_share_params_list, root=0)
+
         print('Current Spltting: ', np.sum(share_params_list)*1.0 / int(var_num))
-
 
         logger.log("Evaluating losses...")
         losses = []
@@ -382,17 +589,6 @@ def learn(env, policy_func, *,
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
 
-        if max_threshold is not None:
-            print('Current max return: ', np.max(rewbuffer))
-            if np.max(rewbuffer) > max_threshold:
-                max_thres_satisfied = True
-            else:
-                max_thres_satisfied = False
-
-        return_threshold_satisfied = True
-        if return_threshold is not None:
-            if not(np.mean(rewbuffer) > return_threshold and iters_so_far > min_iters):
-                return_threshold_satisfied = False
     return pis, np.mean(rewbuffer)
 
 def flatten_lists(listoflists):

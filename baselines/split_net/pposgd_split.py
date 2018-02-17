@@ -144,7 +144,7 @@ def learn(env, policy_func, *,
         split_iter=0,
         split_percent=0.0,
         split_interval = 1000000,
-        adapt_split = False,
+        adapt_split = False
         ):
 
     # Setup losses and stuff

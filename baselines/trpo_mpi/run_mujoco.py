@@ -18,7 +18,7 @@ def train(env_id, num_timesteps, seed):
     workerseed = seed + 10000 * MPI.COMM_WORLD.Get_rank()
     def policy_fn(name, ob_space, ac_space):
         return MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-            hid_size=32, num_hid_layers=2)
+            hid_size=64, num_hid_layers=2)
 
     env = gym.make(env_id)
     env = bench.Monitor(env, logger.get_dir() and
@@ -35,8 +35,8 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('trpo8000_lowdim_' + args.env + str(args.seed))
-    train(args.env, num_timesteps=8000000, seed=args.seed)
+    logger.configure('trpo8000_fixed_allmatch_' + args.env + str(args.seed))
+    train(args.env, num_timesteps=3000000, seed=args.seed)
 
 
 if __name__ == '__main__':

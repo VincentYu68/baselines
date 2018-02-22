@@ -198,8 +198,6 @@ def learn(env, policy_fn, *,
         if 'logstd' in pi.get_variables()[p].name:
             assign_op = pi.get_variables()[p].assign(np.reshape(rllab_trained_params['output_log_std.param'], (1, len(rllab_trained_params['output_log_std.param']))))
             U.get_session().run(assign_op)
-
-
     ob = np.arange(21)
     print(pi.act(False, ob))
 
@@ -220,7 +218,7 @@ def learn(env, policy_fn, *,
         return allmean(compute_fvp(p, *fvpargs)) + cg_damping * p
 
     #print(klgrads(g, *fvpargs))
-    #print(lossbefore[1])'''
+    print(lossbefore[1])'''
 
     # manually compute kl divergence for comparison
     '''all_obs = input_data[0]
@@ -273,7 +271,39 @@ def learn(env, policy_fn, *,
     print(stepdir)
     print(stepdir.dtype)
 
+    assert np.isfinite(stepdir).all()
+    shs = .5 * stepdir.dot(fisher_vector_product(stepdir))
+    lm = np.sqrt(shs / max_kl)
+    # logger.log("lagrange multiplier:", lm, "gnorm:", np.linalg.norm(g))
+    fullstep = stepdir / lm
+    expectedimprove = g.dot(fullstep)
+    surrbefore = lossbefore[0]
+    stepsize = 1.0
+    thbefore = get_flat()
+    print(fullstep)
+    for _ in range(10):
+        thnew = thbefore + fullstep * stepsize
+        set_from_flat(thnew)
+        meanlosses = surr, kl, *_ = allmean(np.array(compute_losses(input_data[0], input_data[1], input_data[2])))
+        improve = surr - surrbefore
+        logger.log("Expected: %.3f Actual: %.3f" % (expectedimprove, improve))
+        if not np.isfinite(meanlosses).all():
+            logger.log("Got non-finite value of losses -- bad!")
+        elif kl > max_kl * 1.0:
+            logger.log("violated KL constraint. shrinking step.")
+        elif improve < 0:
+            logger.log("surrogate didn't improve. shrinking step.")
+        else:
+            logger.log("Stepsize OK!")
+            break
+        #print(kl, max_kl)
+        stepsize *= .8
+    else:
+        logger.log("couldn't compute a good step")
+        set_from_flat(thbefore)
+    #print(stepsize, thnew)
     abc'''
+
     ############# test with rllab data
 
     th_init = get_flat()
@@ -350,14 +380,14 @@ def learn(env, policy_fn, *,
                 logger.log("Expected: %.3f Actual: %.3f"%(expectedimprove, improve))
                 if not np.isfinite(meanlosses).all():
                     logger.log("Got non-finite value of losses -- bad!")
-                elif kl > max_kl * 1.5:
+                elif kl > max_kl * 1.0:
                     logger.log("violated KL constraint. shrinking step.")
                 elif improve < 0:
                     logger.log("surrogate didn't improve. shrinking step.")
                 else:
                     logger.log("Stepsize OK!")
                     break
-                stepsize *= .5
+                stepsize *= .8
             else:
                 logger.log("couldn't compute a good step")
                 set_from_flat(thbefore)
@@ -369,6 +399,7 @@ def learn(env, policy_fn, *,
             logger.record_tabular(lossname, lossval)
 
         with timed("vf"):
+
             for _ in range(vf_iters):
                 for (mbob, mbret) in dataset.iterbatches((seg["ob"], seg["tdlamret"]),
                 include_final_partial_batch=False, batch_size=64):

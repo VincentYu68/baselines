@@ -1,33 +1,23 @@
-if false; then
-# session 1
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 1 --batch 2000 --split_iter 1000 --split_percent 0.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 2 --batch 2000 --split_iter 1000 --split_percent 0.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 3 --batch 2000 --split_iter 1000 --split_percent 0.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 1 --batch 2000 --split_iter 0 --split_percent 1.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 2 --batch 2000 --split_iter 0 --split_percent 1.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 3 --batch 2000 --split_iter 0 --split_percent 1.0
+export ENVNAME='--env DartReacher3d-v1'
+export EXPNAME='--expname _2task_updown_'
+export BATCHSIZE=5000
 
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 1 --batch 2000 --split_iter 10 --split_percent 0.05 --split_interval 5
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 2 --batch 2000 --split_iter 10 --split_percent 0.05 --split_interval 5
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 3 --batch 2000 --split_iter 10 --split_percent 0.05 --split_interval 5
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 1 --batch 2000 --split_iter 10 --split_percent 0.0 --split_interval 5 --adapt_split 1
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 2 --batch 2000 --split_iter 10 --split_percent 0.0 --split_interval 5 --adapt_split 1
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfwdbwd_ --seed 3 --batch 2000 --split_iter 10 --split_percent 0.0 --split_interval 5 --adapt_split 1
+if false; then
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 1 --batch $BATCHSIZE --split_iter 1000 --split_percent 0.0 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 2 --batch $BATCHSIZE --split_iter 1000 --split_percent 0.0 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 3 --batch $BATCHSIZE --split_iter 1000 --split_percent 0.0 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 1 --batch $BATCHSIZE --split_iter 1 --split_percent 1.0 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 2 --batch $BATCHSIZE --split_iter 1 --split_percent 1.0 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 1 --batch $BATCHSIZE --split_iter 1 --split_percent 1.0 --ob_rms 0 --final_std 1.0
 fi
 
 #if false; then
-# session 2
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 1 --batch 2000 --split_iter 1000 --split_percent 0.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 2 --batch 2000 --split_iter 1000 --split_percent 0.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 3 --batch 2000 --split_iter 1000 --split_percent 0.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 1 --batch 2000 --split_iter 0 --split_percent 1.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 2 --batch 2000 --split_iter 0 --split_percent 1.0
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 3 --batch 2000 --split_iter 0 --split_percent 1.0
-
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 1 --batch 2000 --split_iter 10 --split_percent 0.05 --split_interval 5
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 2 --batch 2000 --split_iter 10 --split_percent 0.05 --split_interval 5
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 3 --batch 2000 --split_iter 10 --split_percent 0.05 --split_interval 5
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 1 --batch 2000 --split_iter 10 --split_percent 0.0 --split_interval 5 --adapt_split 1
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 2 --batch 2000 --split_iter 10 --split_percent 0.0 --split_interval 5 --adapt_split 1
-mpirun -np 4 python -m baselines.split_net.run_exp --expname _2taskfric011_ --seed 3 --batch 2000 --split_iter 10 --split_percent 0.0 --split_interval 5 --adapt_split 1
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 1 --batch $BATCHSIZE --split_iter 50 --split_percent 0.25 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 2 --batch $BATCHSIZE --split_iter 50 --split_percent 0.25 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 3 --batch $BATCHSIZE --split_iter 50 --split_percent 0.25 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 1 --batch $BATCHSIZE --split_iter 50 --split_percent 0.5 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 2 --batch $BATCHSIZE --split_iter 50 --split_percent 0.5 --ob_rms 0 --final_std 1.0
+mpirun -np 4 python -m baselines.split_net.run_exp $ENVNAME $EXPNAME --seed 3 --batch $BATCHSIZE --split_iter 50 --split_percent 0.5 --ob_rms 0 --final_std 1.0
 #fi
+
+

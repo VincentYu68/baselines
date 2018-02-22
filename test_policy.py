@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from gym import wrappers
 import tensorflow as tf
 from baselines.ppo1 import mlp_policy, pposgd_simple
+from baselines.split_net import mlp_split_policy
 import baselines.common.tf_util as U
 import pydart2.utils.transformations as trans
 import json
@@ -20,8 +21,8 @@ import json
 np.random.seed(1)
 
 def policy_fn(name, ob_space, ac_space):
-    return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-                                hid_size=64, num_hid_layers=3, gmm_comp=1)
+    return mlp_split_policy.MlpSplitPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
+                                hid_size=64, num_hid_layers=3, gmm_comp=1, obrms=False, final_std=1.0)
 
 def save_one_frame_shape(env, fpath, step):
     robo_skel = env.env.robot_skeleton
@@ -101,7 +102,6 @@ if __name__ == '__main__':
         cur_scope = policy.get_variables()[0].name[0:policy.get_variables()[0].name.find('/')]
         orig_scope = list(policy_params.keys())[0][0:list(policy_params.keys())[0].find('/')]
         vars = policy.get_variables()
-
         for i in range(len(policy.get_variables())):
             assign_op = policy.get_variables()[i].assign(
                 policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])

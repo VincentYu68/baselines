@@ -25,14 +25,15 @@ def callback(localv, globalv):
         joblib.dump(save_dict, logger.get_dir() + '/policy_params_t'+str(t) + '.pkl', compress=True)
 
 
-def train(env_id, num_timesteps, batch, seed, split_iter, split_percent, split_interval, adapt_split):
+
+def train(env_id, num_timesteps, batch, seed, split_iter, split_percent, split_interval, adapt_split, ob_rms, final_std):
     from baselines.split_net import mlp_split_policy, pposgd_split
     U.make_session(num_cpu=1).__enter__()
     set_global_seeds(seed)
     env = gym.make(env_id)
     def policy_fn(name, ob_space, ac_space):
         return mlp_split_policy.MlpSplitPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-            hid_size=64, num_hid_layers=3, gmm_comp=1)
+            hid_size=64, num_hid_layers=3, gmm_comp=1, obrms=ob_rms, final_std=final_std)
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
     env.seed(seed+MPI.COMM_WORLD.Get_rank())
@@ -62,10 +63,14 @@ def main():
     parser.add_argument('--adapt_split', help='adaptive split', type=int, default=0)
     parser.add_argument('--batch', help='batch per thread', type=int, default=2000)
     parser.add_argument('--expname', help='name of the experiment', type=str, default='')
+    parser.add_argument('--ob_rms', help='whether to use observation rms', type=int, default=1)
+    parser.add_argument('--final_std', help='final layer standard deviation', type=float, default=0.01)
     args = parser.parse_args()
     logger.reset()
     logger.configure('data/ppo_'+args.env+str(args.seed)+'_split_'+str(args.split_iter)+'_'+str(args.split_percent)+'_'+str(args.split_interval)+'_'+str(args.adapt_split)+args.expname+str(args.batch))
-    train(args.env, num_timesteps=int(10000*900), batch = args.batch, seed=args.seed, split_iter=args.split_iter, split_percent=args.split_percent, split_interval=args.split_interval, adapt_split=args.adapt_split)
+    train(args.env, num_timesteps=int(10000*500), batch = args.batch, seed=args.seed, split_iter=args.split_iter,
+          split_percent=args.split_percent, split_interval=args.split_interval, adapt_split=args.adapt_split,
+          ob_rms = args.ob_rms==1, final_std=args.final_std)
 
 if __name__ == '__main__':
     main()

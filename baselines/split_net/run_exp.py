@@ -26,7 +26,7 @@ def callback(localv, globalv):
 
 
 
-def train(env_id, num_timesteps, batch, seed, split_iter, split_percent, split_interval, adapt_split, ob_rms, final_std):
+def train(env_id, num_timesteps, batch, seed, split_iter, split_percent, split_interval, adapt_split, ob_rms, final_std, rand_split):
     from baselines.split_net import mlp_split_policy, pposgd_split
     U.make_session(num_cpu=1).__enter__()
     set_global_seeds(seed)
@@ -49,6 +49,7 @@ def train(env_id, num_timesteps, batch, seed, split_iter, split_percent, split_i
                        split_percent=split_percent,
                        split_interval = split_interval,
                        adapt_split = adapt_split == 1,
+                       rand_split = rand_split,
         )
     env.close()
 
@@ -65,12 +66,13 @@ def main():
     parser.add_argument('--expname', help='name of the experiment', type=str, default='')
     parser.add_argument('--ob_rms', help='whether to use observation rms', type=int, default=1)
     parser.add_argument('--final_std', help='final layer standard deviation', type=float, default=0.01)
+    parser.add_argument('--rand_split', help='whether to use random split', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
     logger.configure('data/ppo_'+args.env+str(args.seed)+'_split_'+str(args.split_iter)+'_'+str(args.split_percent)+'_'+str(args.split_interval)+'_'+str(args.adapt_split)+args.expname+str(args.batch))
-    train(args.env, num_timesteps=int(10000*500), batch = args.batch, seed=args.seed, split_iter=args.split_iter,
+    train(args.env, num_timesteps=int(10000*400), batch = args.batch, seed=args.seed, split_iter=args.split_iter,
           split_percent=args.split_percent, split_interval=args.split_interval, adapt_split=args.adapt_split,
-          ob_rms = args.ob_rms==1, final_std=args.final_std)
+          ob_rms = args.ob_rms==1, final_std=args.final_std, rand_split = args.rand_split == 1)
 
 if __name__ == '__main__':
     main()

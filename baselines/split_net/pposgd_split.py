@@ -140,14 +140,15 @@ def learn(env, policy_func, *,
           policy_scope=None,
           max_threshold=None,
           positive_rew_enforce=False,
-          reward_drop_bound=50,
+          reward_drop_bound=300,
           min_iters=0,
           ref_policy_params=None,
           rollout_length_thershold=None,
           split_iter=0,
           split_percent=0.0,
           split_interval=1000000,
-          adapt_split=False
+          adapt_split=False,
+          rand_split=False
           ):
     # Setup losses and stuff
     # ----------------------------------------
@@ -266,6 +267,7 @@ def learn(env, policy_func, *,
         task_assign_old_eq_new[t]()
     split_percentage_history_vf = []
     split_percentage_history_pol = []
+    avg_grad_stds_buffer = []
     while True:
         if callback: callback(locals(), globals())
         if max_timesteps and timesteps_so_far >= max_timesteps:
@@ -340,7 +342,7 @@ def learn(env, policy_func, *,
         logger.log(fmt_row(13, loss_names))
 
         # Here we do a bunch of optimization epochs over the data
-        avg_grad_stds = np.zeros((task_size, var_num))
+        avg_grad_stds_one = np.zeros((task_size, var_num))
         all_task_grads = np.zeros((task_size, var_num))
         for _ in range(optim_epochs):
             losses = []  # list of tuples, each of which gives the loss for a minibatch
@@ -378,7 +380,11 @@ def learn(env, policy_func, *,
         for t in range(task_size):
             gmask = share_params_list == t
             masked_gradient = np.ma.masked_array(globalg, mask=(1 - gmask))
-            avg_grad_stds[t, :] += np.ma.std(masked_gradient, axis=0).data
+            avg_grad_stds_one[t, :] += np.ma.std(masked_gradient, axis=0).data
+        avg_grad_stds_buffer.append(avg_grad_stds_one)
+        if len(avg_grad_stds_buffer) > 10:
+            avg_grad_stds_buffer.pop(0)
+        avg_grad_stds = np.mean(avg_grad_stds_buffer, axis=0)
 
         if iters_so_far == split_iter or (iters_so_far % split_interval == 0 and iters_so_far > 0):  # iters_so_far % 4 == 0 and iters_so_far >= 10 and iters_so_far < 50:
             logger.log("Split networks ...")
@@ -490,6 +496,8 @@ def learn(env, policy_func, *,
 
             if MPI.COMM_WORLD.Get_rank() == 0:
                 if iters_so_far == split_iter:  # if
+                    if rand_split:
+                        avg_grad_stds[0,:] = np.random.random(avg_grad_stds[0,:].shape)
                     avg_grad_stds_pol = avg_grad_stds[:, vf_var_num:]
                     std_order_pol = np.zeros(np.prod(avg_grad_stds_pol.shape))
                     std_order_pol[
@@ -502,6 +510,7 @@ def learn(env, policy_func, *,
                         if avg_grad_stds_pol[sorted_stds_pol == sp] > 0:
                             # split for all tasks for now
                             split_index = np.argwhere(sorted_stds_pol == sp)[0]
+                            print('splitting metric ', avg_grad_stds_pol[0, split_index[1]])
                             for t in range(task_size):
                                 pol_share_params_list[t, split_index[1]] = t
                     print('POL Spltting: ', np.sum(pol_share_params_list[1,:]) * 1.0 / int(pol_var_num))
@@ -553,6 +562,33 @@ def learn(env, policy_func, *,
                         print('VF Spltting: ', np.sum(vf_share_params_list[1,:]) * 1.0 / int(vf_var_num))
                         share_params_list[:, 0:vf_var_num] = vf_share_params_list
 
+                # plot splitted network
+                param_shapes = [v.shape for v in pis[0].get_trainable_variables()]
+                param_names = [v.name for v in pis[0].get_trainable_variables()]
+                import matplotlib.pyplot as plt
+                import matplotlib as cm
+                current_id = 0
+                print('plot info!!!')
+                for p in range(len(param_shapes)):
+                    print(param_names[p])
+                    nex_id = current_id + int(np.prod(param_shapes[p]))
+                    std_data = avg_grad_stds[0, current_id:nex_id]
+                    split_data = share_params_list[1, current_id:nex_id]
+                    current_id = nex_id
+                    if len(param_shapes[p]) == 2:
+                        std_data = np.reshape(std_data, param_shapes[p])
+                        split_data = np.reshape(split_data, param_shapes[p])
+                    else:
+                        std_data = np.reshape(std_data, (param_shapes[p][0],1))
+                        split_data = np.reshape(split_data, (param_shapes[p][0],1))
+                    fig = plt.figure()
+                    plt.imshow(std_data)
+                    plt.colorbar()
+                    plt.savefig(logger.get_dir() + '/'+param_names[p].replace('/','_')+'_std.jpg')
+                    fig = plt.figure()
+                    plt.imshow(split_data)
+                    plt.colorbar()
+                    plt.savefig(logger.get_dir() + '/'+param_names[p].replace('/','_')+'_split.jpg')
 
             MPI.COMM_WORLD.Bcast(share_params_list, root=0)
             MPI.COMM_WORLD.Bcast(vf_share_params_list, root=0)

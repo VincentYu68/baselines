@@ -42,23 +42,23 @@ if __name__ == '__main__':
                     if 'EpLenMean' in pline:
                         all_len[i][-1].append(pline['EpLenMean'])
 
-    colors = ['r','g','b','c','y']
+    #colors = ['r','g','b','c','y']
     plt.figure()
     for gp in range(len(all_data)):
         for sp in range(len(all_data[gp])):
             if sp == 0:
-                plt.plot(all_data[gp][sp], colors[gp], label=algnames[gp])
+                plt.plot(all_data[gp][sp], label=algnames[gp])
             else:
-                plt.plot(all_data[gp][sp], colors[gp])
+                plt.plot(all_data[gp][sp])
     plt.legend()
 
     plt.figure()
     for gp in range(len(all_len)):
         for sp in range(len(all_len[gp])):
             if sp == 0:
-                plt.plot(all_len[gp][sp], colors[gp], label=algnames[gp])
+                plt.plot(all_len[gp][sp], label=algnames[gp])
             else:
-                plt.plot(all_len[gp][sp], colors[gp])
+                plt.plot(all_len[gp][sp])
     plt.legend()
     plt.show()
 

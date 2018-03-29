@@ -102,7 +102,7 @@ def learn(env, policy_func, *,
     # ----------------------------------------
     ob_space = env.observation_space
     ac_space = env.action_space
-    pi = policy_func("pi", ob_space, ac_space) # Construct network for new policy
+    pi = policy_func("pi", ob_space, ac_space, ) # Construct network for new policy
     oldpi = policy_func("oldpi", ob_space, ac_space) # Network for old policy
     atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
     ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
@@ -124,11 +124,33 @@ def learn(env, policy_func, *,
     surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
     pol_surr = - U.mean(tf.minimum(surr1, surr2)) # PPO's pessimistic surrogate (L^CLIP)
     vf_loss = U.mean(tf.square(pi.vpred - ret))
-    total_loss = pol_surr + pol_entpen + vf_loss
     losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
     loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
 
     var_list = pi.get_trainable_variables()
+
+    if hasattr(pi, 'mp_dim'):
+        if pi.mp_dim > 0:
+            variable_groups = {}
+            regularizer = 0
+            for var in var_list:
+                for i in range(pi.mp_dim):
+                    if '_s'+str(i) in var.name:
+                        varkey = var.name[0:-3]
+                        if varkey in variable_groups:
+                            variable_groups[varkey].append(var)
+                        else:
+                            variable_groups[varkey] = [var]
+            for k,v in variable_groups.items():
+                for i1 in range(len(v)):
+                    for i2 in range(i1, len(v)):
+                        regularizer += 1.0*U.mean(tf.square(v[i1]-v[i2]))
+            loss_names.append('regularizer')
+            pol_surr += regularizer
+            losses.append(regularizer)
+
+    total_loss = pol_surr + pol_entpen + vf_loss
+
     lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(total_loss, var_list)])
     adam = MpiAdam(var_list, epsilon=adam_epsilon)
 

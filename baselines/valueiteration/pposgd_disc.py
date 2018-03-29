@@ -123,7 +123,8 @@ def learn(env, policy_func, *,
         reward_drop_bound = True,
         min_iters = 0,
         ref_policy_params = None,
-        discrete_learning = None # [obs_disc, act_disc, state_filter_fn, state_unfilter_fn, weight]
+        discrete_learning = None, # [obs_disc, act_disc, state_filter_fn, state_unfilter_fn, weight]
+        fitted_policy_params = None
         ):
 
     # Setup losses and stuff
@@ -152,16 +153,16 @@ def learn(env, policy_func, *,
     meanent = U.mean(ent)
     pol_entpen = (-entcoeff) * meanent
 
-    sym_loss = sym_loss_weight * U.mean(tf.square(pi.mean - pi.mirrored_mean))    # mirror symmetric loss
+    #sym_loss = sym_loss_weight * U.mean(tf.square(pi.mean - pi.mirrored_mean))    # mirror symmetric loss
     ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac)) # pnew / pold
     surr1 = ratio * atarg # surrogate from conservative policy iteration
     surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
-    pol_surr = - U.mean(tf.minimum(surr1, surr2)) + sym_loss # PPO's pessimistic surrogate (L^CLIP)
+    pol_surr = - U.mean(tf.minimum(surr1, surr2))# + sym_loss # PPO's pessimistic surrogate (L^CLIP)
 
     vf_loss = U.mean(tf.square(pi.vpred - ret))
     total_loss = pol_surr + pol_entpen + vf_loss
-    losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent, sym_loss]
-    loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent", "sym_loss"]
+    losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
+    loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
 
     var_list = pi.get_trainable_variables()
     lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(total_loss, var_list)])
@@ -192,6 +193,12 @@ def learn(env, policy_func, *,
             U.get_session().run(assign_op)
         #env.env.env.ref_policy = ref_pi
 
+    if fitted_policy_params is not None:
+        for i in range(len(fitted_policy_params[0].get_variables())):
+            assign_op = fitted_policy_params[0].get_variables()[i].assign(
+                fitted_policy_params[1][fitted_policy_params[0].get_variables()[i].name])
+            U.get_session().run(assign_op)
+
     adam.sync()
 
     # Prepare for rollouts
@@ -220,10 +227,11 @@ def learn(env, policy_func, *,
     Vfunc = {}
 
     # temp
-    import joblib
+    '''import joblib
     path = 'data/value_iter_cartpole_discrete'
+    disc_pi = joblib.load(path + '/policy.pkl')
     [Vfunc, obs_disc, act_disc, state_filter_fn, state_unfilter_fn] = joblib.load(
-        path + '/ref_policy_funcs.pkl')
+        path + '/ref_policy_funcs.pkl')'''
 
     while True:
         if callback: callback(locals(), globals())
@@ -292,7 +300,7 @@ def learn(env, policy_func, *,
                         print('Reward wrong!')
                         abc
                     seg["rew"][i] = seg["pos_rews"][i] + seg["neg_pens"][i] * adjust_ratio
-        if ref_policy_params is not None:
+        '''if ref_policy_params is not None:
             rewed = 0
             for i in range(len(seg["rew"])):
                 #pred_nexvf = np.max([ref_pi.act(False, seg["collected_transitions"][i][5])[1], pi.act(False, seg["collected_transitions"][i][5])[1]])
@@ -309,8 +317,8 @@ def learn(env, policy_func, *,
 
                 vf_diff = 0.99 * pred_nexvf - pred_curvf
                 seg["rew"][i] += vf_diff * 0.1
-            print('rewarded for : ', rewed / len(seg["rew"]))
-        if discrete_learning is not None:
+            print('rewarded for : ', rewed / len(seg["rew"]))'''
+        '''if discrete_learning is not None:
             rewlocal = (seg["collected_transitions"], seg["rew"])  # local values
             listofrews = MPI.COMM_WORLD.allgather(rewlocal)  # list of tuples
             collected_transitions, rews = map(flatten_lists, zip(*listofrews))
@@ -324,7 +332,7 @@ def learn(env, policy_func, *,
                 logger.log("Fitting discrete dynamic model...")
                 dyn_model, obs_disc = fit_dyn_model(discrete_learning[0], discrete_learning[1], all_collected_transition_data)
                 logger.log("Perform value iteration on the discrete dynamic model...")
-                Vfunc, policy = optimize_policy(dyn_model, 0.99)
+                Vfunc, disc_pi = optimize_policy(dyn_model, 0.99)
                 discrete_learning[0] = obs_disc
                 rewarded = 0
                 for i in range(len(seg["rew"])):
@@ -334,7 +342,7 @@ def learn(env, policy_func, *,
                     #if policy[discrete_learning[0](discrete_learning[2](seg["collected_transitions"][i][0]))] == discrete_learning[1](seg["collected_transitions"][i][1]):
                     #    seg["rew"][i] += 2.0
                     #    rewarded += 1
-                #logger.log(str(rewarded*1.0/len(seg["rew"])) + ' rewarded')
+                #logger.log(str(rewarded*1.0/len(seg["rew"])) + ' rewarded')'''
 
         add_vtarg_and_adv(seg, gamma, lam)
 

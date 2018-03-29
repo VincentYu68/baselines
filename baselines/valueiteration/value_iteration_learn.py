@@ -1,6 +1,21 @@
 from baselines.valueiteration.utils import *
 import numpy as np
 
+def propagate_dyn_model(collected_data, dyn_rwd_model, obs_disc, act_disc):
+    for trans in collected_data:
+        if obs_disc(trans[0]) > obs_disc.bin_num:
+            print(obs_disc(trans[0]), trans[0])
+            print(obs_disc.disc_scheme)
+            abc
+        if obs_disc(trans[0]) not in dyn_rwd_model:
+            dyn_rwd_model[obs_disc(trans[0])] = {}
+        if act_disc(trans[1]) not in dyn_rwd_model[obs_disc(trans[0])]:
+            dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])] = {}
+        if obs_disc(trans[2]) not in dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])]:
+            dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])] = [0.0, 0.0]
+        dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])][0] += 1
+        dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])][1] += trans[3]
+    return dyn_rwd_model
 
 def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filter, state_unfilter, policy = None, disc_policy = True, collected_data = []):
     dyn_rwd_model = {}
@@ -8,7 +23,8 @@ def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filte
 
     all_state = []
     traj_num = 0
-    batch_size = 5000
+    batch_size = 500000
+    additional_batch_size = 0
     total_rew = 0
     while collected_steps < batch_size:
         d = False
@@ -39,37 +55,55 @@ def learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filte
     print('Average rollout length: ', batch_size / traj_num)
     print('Average return: ', total_rew / traj_num)
 
-    '''additional_data = []
-    for trans in collected_data:
-        for i in range(10):
-            samp_s = state_unfilter(trans[0]) + np.random.random(len(state_unfilter(trans[0]))) * 0.1
-            samp_a = trans[1] + np.random.random(len(trans[1])) * 0.02
-            env.env.set_state_vector(samp_s)
-            o,r,d,_=env.step(samp_a)
-            additional_data.append([state_filter(samp_s), samp_a, state_filter(env.env.state_vector()), r])
-            all_state.append(state_filter(samp_s))
-    collected_data += additional_data'''
-
     max_vals = np.max(all_state, axis=0)
     min_vals = np.min(all_state, axis=0)
     print(np.max(all_state, axis=0), np.min(all_state, axis=0), len(collected_data))
     for d in range(obs_disc.ndim):
-        obs_disc.disc_scheme[d][1] = np.max([obs_disc.disc_scheme[d][1], max_vals[d] + 0.0001])
-        obs_disc.disc_scheme[d][2] = np.min([obs_disc.disc_scheme[d][2], min_vals[d] - 0.0001])
+        obs_disc.disc_scheme[d][1] = np.max([obs_disc.disc_scheme[d][1], max_vals[d] + 0.1])
+        obs_disc.disc_scheme[d][2] = np.min([obs_disc.disc_scheme[d][2], min_vals[d] - 0.1])
 
-    for trans in collected_data:
-        if obs_disc(trans[0]) > obs_disc.bin_num:
-            print(obs_disc(trans[0]), trans[0])
-            print(obs_disc.disc_scheme)
-            abc
-        if obs_disc(trans[0]) not in dyn_rwd_model:
-            dyn_rwd_model[obs_disc(trans[0])] = {}
-        if act_disc(trans[1]) not in dyn_rwd_model[obs_disc(trans[0])]:
-            dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])] = {}
-        if obs_disc(trans[2]) not in dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])]:
-            dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])] = [0.0, 0.0]
-        dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])][0] += 1
-        dyn_rwd_model[obs_disc(trans[0])][act_disc(trans[1])][obs_disc(trans[2])][1] += trans[3]
+    dyn_rwd_model = propagate_dyn_model(collected_data, dyn_rwd_model, obs_disc, act_disc)
+
+    additional_data = []
+    occurance_rank_stateactions = []
+    for s in dyn_rwd_model.keys():
+        for a in dyn_rwd_model[s].keys():
+            occurence = 0
+            for sn in dyn_rwd_model[s][a].keys():
+                occurence += dyn_rwd_model[s][a][sn][0]
+            occurance_rank_stateactions.append([occurence, [s, a]])
+    occurance_rank_stateactions.sort(key=lambda ls: ls[0])
+
+    add_steps = 0
+    for i in range(len(occurance_rank_stateactions)):
+        for rep in range(10):
+            add_steps += 1
+            s = occurance_rank_stateactions[i][1][0]
+            a = occurance_rank_stateactions[i][1][1]
+            samp_s = state_unfilter(obs_disc.samp_state(s))
+            if np.random.random() < 0.5:
+                samp_a = act_disc.samp_state(a)
+            else:
+                samp_a = env.action_space.sample()
+            env.env.set_state_vector(samp_s)
+            o,r,d,_= env.step(samp_a)
+            additional_data.append([state_filter(samp_s), samp_a, state_filter(env.env.state_vector()), r])
+            all_state.append(state_filter(samp_s))
+        if add_steps > additional_batch_size:
+            break
+
+    dyn_rwd_model = {}
+    collected_data += additional_data
+    max_vals = np.max(all_state, axis=0)
+    min_vals = np.min(all_state, axis=0)
+    print(np.max(all_state, axis=0), np.min(all_state, axis=0), len(collected_data))
+    for d in range(obs_disc.ndim):
+        obs_disc.disc_scheme[d][1] = np.max([obs_disc.disc_scheme[d][1], max_vals[d] + 0.1])
+        obs_disc.disc_scheme[d][2] = np.min([obs_disc.disc_scheme[d][2], min_vals[d] - 0.1])
+
+    dyn_rwd_model = propagate_dyn_model(collected_data, dyn_rwd_model, obs_disc, act_disc)
+
+    print('Collected data after augmentation: ', len(collected_data))
 
     occurances = []
     rews = []

@@ -123,7 +123,7 @@ def learn(env, policy_func, *,
     dist = meankl
 
     all_var_list = pi.get_trainable_variables()
-    var_list = [v for v in all_var_list if v.name.split("/")[1].startswith("pol")]
+    var_list = [v for v in all_var_list if v.name.split("/")[1].startswith("pol") or "logstd" in v.name]
     vf_var_list = [v for v in all_var_list if v.name.split("/")[1].startswith("vf")]
     vfadam = MpiAdam(vf_var_list)
 
@@ -208,7 +208,7 @@ def learn(env, policy_func, *,
         if hasattr(pi, "ob_rms"): pi.ob_rms.update(ob) # update running mean/std for policy
 
         args = seg["ob"], seg["ac"], atarg
-        fvpargs = [arr[::5] for arr in args]
+        fvpargs = [arr for arr in args]
         def fisher_vector_product(p):
             return allmean(compute_fvp(p, *fvpargs)) + cg_damping * p
 

@@ -11,6 +11,7 @@ import numpy as np
 from mpi4py import MPI
 from baselines.valueiteration.utils import *
 from baselines.ppo1 import pposgd_simple
+from baselines.valueiteration.mlp_net import *
 
 def callback(localv, globalv):
     if localv['iters_so_far'] % 10 != 0:
@@ -25,31 +26,40 @@ def callback(localv, globalv):
 
 
 def train(env_id, num_timesteps, seed):
-    from baselines.ppo1 import mlp_policy, pposgd_simple
+    from baselines.valueiteration import mlp_additive_policy, pposgd_disc
     U.make_session(num_cpu=1).__enter__()
     set_global_seeds(seed)
     env = gym.make(env_id)
     def policy_fn(name, ob_space, ac_space):
-        return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-            hid_size=64, num_hid_layers=3, gmm_comp=1)
+        return mlp_additive_policy.MlpAddPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
+            hid_size=64, num_hid_layers=3, gmm_comp=1, learn_additive=False)
 
-    if env.env.use_disc_ref_policy:
-        ref_policy_funcs = joblib.load(
-            'data/value_iter_hopper_discrete/ref_policy_funcs.pkl')
-        env.env.disc_funcs = ref_policy_funcs
+    env.env.use_disc_ref_policy = True
+    env.env.learn_additive_pol = True
+    path = 'data/value_iter_cartpole_discrete_adaptsampled_fromtrained'
+    disc_pi = joblib.load(path + '/policy.pkl')
+    ref_policy_funcs = joblib.load(
+        path + '/ref_policy_funcs.pkl')
+    env.env.disc_funcs = ref_policy_funcs
+    env.env.disc_policy = disc_pi
+
+    fitpol_params = joblib.load(path+'/fitpolparams.pkl')
+    fitted_policy = MlpNet('fitpol', ref_policy_funcs[1].ndim, ref_policy_funcs[2].ndim, hid_size=64, num_hid_layers=3)
+    env.env.disc_fit_policy = fitted_policy
 
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
-    env.seed(seed)
+    env.seed(seed + MPI.COMM_WORLD.Get_rank())
     gym.logger.setLevel(logging.WARN)
-    pposgd_simple.learn(env, policy_fn,
+    pposgd_disc.learn(env, policy_fn,
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(2500),
+            timesteps_per_batch=int(2000),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
-            gamma=0.99, lam=0.95, schedule='linear',
+            gamma=0.99, lam=0.95, schedule='constant',
                         callback=callback,
-                        init_policy_params = joblib.load('data/ppo_DartHopper-v10_using_no_disc_ref_policy/policy_params_40.pkl')
+                        fitted_policy_params = [fitted_policy, fitpol_params],
+                        #init_policy_params = joblib.load('data/ppo_DartHopper-v10_using_no_disc_ref_policy/policy_params_40.pkl')
         )
     env.close()
 
@@ -61,8 +71,8 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_using_disc_ref_policy_iter_2')
-    train(args.env, num_timesteps=int(5000*40), seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_discfitpolicy_additive')
+    train(args.env, num_timesteps=int(5000*200), seed=args.seed)
 
 
 if __name__ == '__main__':

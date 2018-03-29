@@ -22,12 +22,13 @@ def policy_fn(name, ob_space, ac_space):
         hid_size=64, num_hid_layers=3, gmm_comp=1)
 
 def main():
-    path = 'data/value_iter_cartpole_discrete_v4'
+    path = 'data/value_iter_cartpole_discrete_adaptsampled_fromtrained'
 
     env = gym.make('DartCartPoleSwingUp-v1')
     env.seed(0)
     env.env.disableViewer = False
 
+    disc_test = False
     record = False
     if record:
         env_wrapper = wrappers.Monitor(env, 'data/videos/', force=True)
@@ -41,7 +42,6 @@ def main():
     print('model loading done')
     print(obs_disc.disc_scheme)
 
-
     for traj in range(1):
         env_wrapper.reset()
         s = state_filter_fn(env.env.state_vector())
@@ -53,16 +53,19 @@ def main():
             #if policy[int(cur_state)] > 5:
             #    print(dyn_model[cur_state])
 
-            if np.random.random() < 0.999 and int(cur_state) in policy and policy[int(cur_state)] is not None:
+            if np.random.random() < 1.1 and int(cur_state) in policy and policy[int(cur_state)] is not None:
                 act = policy[int(cur_state)]
             else:
                 act = np.random.randint(act_disc.bin_num)
 
-            ob, rew, d, _ = env_wrapper.step(act_disc.samp_state(act))
-            cur_state = obs_disc(state_filter_fn(env.env.state_vector()))
-            #cur_state, rew = advance_dyn_model(dyn_model, cur_state, int(act))
-            #map_state = obs_disc.get_midstate(cur_state)
-            #env.env.set_state_vector(state_unfilter_fn(map_state))
+            if record or not disc_test:
+                ob, rew, d, _ = env_wrapper.step(act_disc.samp_state(act))
+            if not disc_test:
+                cur_state = obs_disc(state_filter_fn(env.env.state_vector()))
+            else:
+                cur_state, rew = advance_dyn_model(dyn_model, cur_state, int(act))
+                map_state = obs_disc.get_midstate(cur_state)
+                env.env.set_state_vector(state_unfilter_fn(map_state))
 
             env_wrapper.render()
             #time.sleep(0.05)

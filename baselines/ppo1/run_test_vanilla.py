@@ -30,6 +30,7 @@ def train(env_id, num_timesteps, seed):
     from baselines.valueiteration import pposgd_disc
     U.make_session(num_cpu=1).__enter__()
     env = gym.make(env_id)
+    env.seed(seed + MPI.COMM_WORLD.Get_rank())
 
     '''path = 'data/value_iter_truehopper_discrete'
     [Vfunc, obs_disc, act_disc, state_filter_fn, state_unfilter_fn] = joblib.load(path + '/ref_policy_funcs.pkl')
@@ -42,9 +43,9 @@ def train(env_id, num_timesteps, seed):
                                                  hid_size=64, num_hid_layers=3, gmm_comp=1,
                                                  mirror_loss=True,
                                                  observation_permutation=np.array(
-                                                     [1]*2),
+                                                     [1]*11),
                                                  action_permutation=np.array(
-                                                     [0.001]*1))
+                                                     [0.001]*3))
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
     gym.logger.setLevel(logging.WARN)
@@ -57,17 +58,17 @@ def train(env_id, num_timesteps, seed):
     state_filter_fn = state_filter_hopper
     state_unfilter_fn = state_unfilter_hopper'''
 
-    obs_disc = bin_disc([[51, 0, -0.01], [51, 0.0, -0.01], [51, 0.0, -0.01], [51, 0.0, -0.01]])
+    '''obs_disc = bin_disc([[51, 0, -0.01], [51, 0.0, -0.01], [51, 0.0, -0.01], [51, 0.0, -0.01]])
     act_disc = bin_disc([[100, 1.01, -1.01]])
     state_filter_fn = state_filter_cartpole
-    state_unfilter_fn = state_unfilter_cartpole
+    state_unfilter_fn = state_unfilter_cartpole'''
 
     pposgd_disc.learn(env, policy_fn,
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(500),
+            timesteps_per_batch=int(2000),
             clip_param=0.2, entcoeff=0.0,
             optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
-            gamma=0.99, lam=0.95, schedule='linear',
+            gamma=0.99, lam=0.95, schedule='constant',
                         callback=callback,
                       sym_loss_weight = 0.0,
                       #ref_policy_params=joblib.load('data/ppo_DartCartPoleSwingUp-v11_vanilla/policy_params.pkl')
@@ -86,7 +87,7 @@ def main():
     logger.reset()
     logger.configure('data/ppo_'+args.env+str(args.seed)+'_vf_vanilla_weak_2k')
     #logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy05_bal_vel4smooth_mirror_up1fwd01ltl1_spinepen1yaw001_thighyawpen005_initbentelbow_velrew3_dcontrolconstraint1_strongerarm_asinput_treadmill')
-    train(args.env, num_timesteps=int(500*4*100), seed=args.seed)
+    train(args.env, num_timesteps=int(1000000), seed=args.seed)
 
 if __name__ == '__main__':
     main()

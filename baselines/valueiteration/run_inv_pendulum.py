@@ -21,7 +21,7 @@ def policy_fn(name, ob_space, ac_space):
 
 def main():
 
-    path = 'data/value_iter_cartpole_discrete_v4'
+    path = 'data/value_iter_cartpole_discrete_adaptsampled_fromtrained'
     logger.reset()
     logger.configure(path)
 
@@ -29,8 +29,8 @@ def main():
     env.seed(0)
     #obs_disc = bin_disc([[50, 0, -0.01], [50, 0.0, -0.01]])
     #act_disc = bin_disc([[10, 1.01, -1.01]])
-    obs_disc = bin_disc([[50, 0, -0.01], [50, 0.0, -0.01], [50, 0.0, -0.01], [50, 0.0, -0.01]])
-    act_disc = bin_disc([[50, 1.01, -1.01]])
+    obs_disc = bin_disc([[150, 0, -0.01], [150, 0.0, -0.01], [150, 0.0, -0.01], [150, 0.0, -0.01]])
+    act_disc = bin_disc([[150, 1.01, -1.01]])
 
     '''s_disc = []
     for i in range(11):
@@ -51,9 +51,9 @@ def main():
     state_unfilter_fn = state_unfilter_cartpole
 
     policy = None
-    '''sess = tf.InteractiveSession()
+    sess = tf.InteractiveSession()
     policy_params = joblib.load(
-        'data/ppo_DartCartPoleSwingUp-v11_vanilla/policy_params.pkl')
+        'data/ppo_DartCartPoleSwingUp-v17_vanilla_2k/policy_params.pkl')
     ob_space = env.observation_space
     ac_space = env.action_space
     policy = policy_fn("pi", ob_space, ac_space)
@@ -65,12 +65,12 @@ def main():
         assign_op = policy.get_variables()[i].assign(
             policy_params[policy.get_variables()[i].name.replace(cur_scope, orig_scope, 1)])
         sess.run(assign_op)
-    env.env.use_disc_ref_policy = None'''
+    env.env.use_disc_ref_policy = None
 
     dyn_model, col_data, obs_disc = learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filter_fn, state_unfilter_fn, policy=policy, disc_policy = False)
     Vfunc, policy = optimize_policy(dyn_model, 0.99)
 
-    for iter in range(50):
+    for iter in range(0):
         print('--------------- Iteration ', str(iter), ' -------------------')
         dyn_model, col_data, obs_disc = learn_model(env, obs_disc, obs_disc_dim, act_disc, act_disc_dim, state_filter_fn, state_unfilter_fn, policy = policy, collected_data=col_data)
         Vfunc, policy = optimize_policy(dyn_model, 0.99, Vfunc = Vfunc)
@@ -83,7 +83,9 @@ def main():
         joblib.dump([Vfunc, obs_disc, act_disc, state_filter_fn, state_unfilter_fn], path + '/ref_policy_funcs.pkl', compress=True)
     joblib.dump(dyn_model, path + '/dyn_model.pkl', compress=True)
     joblib.dump(policy, path + '/policy.pkl', compress=True)
-    joblib.dump([Vfunc, obs_disc, act_disc, state_filter_fn, state_unfilter_fn], path + '/ref_policy_funcs.pkl', compress=True)
+    joblib.dump([Vfunc, obs_disc, act_disc, state_filter_fn, state_unfilter_fn], path + '/ref_policy_funcs.pkl',
+                compress=True)
+
 
 if __name__ == '__main__':
     main()

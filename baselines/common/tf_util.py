@@ -339,6 +339,24 @@ def dense_wparams(x, size, name, weight_init=None, bias=True):
     else:
         return ret,w
 
+def mtdense(x, mp, size, name, weight_init=None, bias=True):
+    snetnum = mp.shape[1] + 1
+    indiv_mps = tf.split(mp, np.int32([1]*(snetnum-1)), 1)
+    w_nom = tf.get_variable(name + "/w_s0", [x.get_shape()[1], size], initializer=weight_init)
+    ret = tf.matmul(x, w_nom)
+    for n in range(snetnum-1):
+        w = tf.get_variable(name + "/w_s"+str(n+1), [x.get_shape()[1], size], initializer=weight_init)
+        ret += indiv_mps[n] * tf.matmul(x, w) - indiv_mps[n] * tf.matmul(x, w_nom) # / tf.sqrt(sum(tf.square(w)))
+
+    if bias:
+        b_nom = tf.get_variable(name + "/b_s0", [size], initializer=tf.zeros_initializer())
+        ret += b_nom
+        for n in range(snetnum - 1):
+            b = tf.get_variable(name + "/b_s"+str(n+1), [size], initializer=tf.zeros_initializer())
+            ret += indiv_mps[n] * b - indiv_mps[n] * b_nom# / tf.sqrt(sum(tf.square(b))+1e-5)
+        return ret
+    else:
+        return ret
 
 def wndense(x, size, name, init_scale=1.0):
     v = tf.get_variable(name + "/V", [int(x.get_shape()[1]), size],

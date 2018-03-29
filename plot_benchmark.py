@@ -6,6 +6,8 @@ import sys, os, time
 import joblib
 import numpy as np
 
+import matplotlib as mpl
+mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 import json
 

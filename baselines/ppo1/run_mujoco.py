@@ -47,12 +47,12 @@ def train(env_id, num_timesteps, seed):
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='DartHopper-v1')
+    parser.add_argument('--env', help='environment ID', default='DartWalker2d-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_test_comp_jointlimit')
-    train(args.env, num_timesteps=int(5000*4*2500), seed=args.seed)
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_jump')
+    train(args.env, num_timesteps=int(200*10000), seed=args.seed)
 
 if __name__ == '__main__':
     main()

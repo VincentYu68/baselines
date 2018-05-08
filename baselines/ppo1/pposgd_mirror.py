@@ -21,11 +21,11 @@ def traj_segment_generator(pi, env, horizon, stochastic):
 
     # Initialize history arrays
     obs = np.array([ob for _ in range(horizon)])
-    rews = np.zeros(horizon, 'float32')
-    pos_rews = np.zeros(horizon, 'float32')
-    neg_pens = np.zeros(horizon, 'float32')
-    avg_vels = np.zeros(horizon, 'float32')
-    vpreds = np.zeros(horizon, 'float32')
+    rews = np.zeros(horizon, 'float64')
+    pos_rews = np.zeros(horizon, 'float64')
+    neg_pens = np.zeros(horizon, 'float64')
+    avg_vels = np.zeros(horizon, 'float64')
+    vpreds = np.zeros(horizon, 'float64')
     news = np.zeros(horizon, 'int32')
     acs = np.array([ac for _ in range(horizon)])
     prevacs = acs.copy()
@@ -85,7 +85,7 @@ def add_vtarg_and_adv(seg, gamma, lam):
     new = np.append(seg["new"], 0) # last element is only used for last vtarg, but we already zeroed it if last new = 1
     vpred = np.append(seg["vpred"], seg["nextvpred"])
     T = len(seg["rew"])
-    seg["adv"] = gaelam = np.empty(T, 'float32')
+    seg["adv"] = gaelam = np.empty(T, 'float64')
     rew = seg["rew"]
     lastgaelam = 0
     for t in reversed(range(T)):
@@ -127,10 +127,10 @@ def learn(env, policy_func, *,
         pi = policy_func(policy_scope, ob_space, ac_space)  # Construct network for new policy
         oldpi = policy_func("old"+policy_scope, ob_space, ac_space)  # Network for old policy
 
-    atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
-    ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
+    atarg = tf.placeholder(dtype=tf.float64, shape=[None]) # Target advantage function (if applicable)
+    ret = tf.placeholder(dtype=tf.float64, shape=[None]) # Empirical return
 
-    lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[]) # learning rate multiplier, updated with schedule
+    lrmult = tf.placeholder(name='lrmult', dtype=tf.float64, shape=[]) # learning rate multiplier, updated with schedule
     clip_param = clip_param * lrmult # Annealed cliping parameter epislon
 
     ob = U.get_placeholder_cached(name="ob")

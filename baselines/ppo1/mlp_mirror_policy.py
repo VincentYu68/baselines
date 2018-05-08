@@ -22,14 +22,14 @@ class MlpMirrorPolicy(object):
         self.mirror_loss = mirror_loss
         if mirror_loss:
             # construct permutation matrices
-            obs_perm_mat = np.zeros((len(observation_permutation), len(observation_permutation)), dtype=np.float32)
-            act_perm_mat = np.zeros((len(action_permutation), len(action_permutation)), dtype=np.float32)
+            obs_perm_mat = np.zeros((len(observation_permutation), len(observation_permutation)), dtype=np.float64)
+            act_perm_mat = np.zeros((len(action_permutation), len(action_permutation)), dtype=np.float64)
             for i, perm in enumerate(observation_permutation):
                 obs_perm_mat[i][int(np.abs(perm))] = np.sign(perm)
             for i, perm in enumerate(action_permutation):
                 act_perm_mat[i][int(np.abs(perm))] = np.sign(perm)
 
-        ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[sequence_length] + list(ob_space.shape))
+        ob = U.get_placeholder(name="ob", dtype=tf.float64, shape=[sequence_length] + list(ob_space.shape))
 
         with tf.variable_scope("obfilter"):
             self.ob_rms = RunningMeanStd(shape=ob_space.shape)
@@ -52,12 +52,12 @@ class MlpMirrorPolicy(object):
                 mean, pw, pb = U.dense_wparams(last_out, pdtype.param_shape()[0]//2, "polfinal", U.normc_initializer(0.01))
                 params.append([pw, pb])
                 self.mean = mean
-                logstd = tf.get_variable(name="logstd", shape=[1, pdtype.param_shape()[0]//2], initializer=tf.zeros_initializer())
+                logstd = tf.get_variable(name="logstd", shape=[1, pdtype.param_shape()[0]//2], initializer=tf.zeros_initializer(), dtype=tf.float64)
                 pdparam = U.concatenate([mean, mean * 0.0 + logstd], axis=1)
             else:
                 means = U.dense(last_out, (pdtype.param_shape()[0] - gmm_comp)//2, "polfinal", U.normc_initializer(0.01))
                 logstd = tf.get_variable(name="logstd",
-                                         initializer=tf.constant(np.ones((1, (pdtype.param_shape()[0] - gmm_comp)//2), dtype=np.float32)*(-1.0)))
+                                         initializer=tf.constant(np.ones((1, (pdtype.param_shape()[0] - gmm_comp)//2), dtype=np.float64)*(-1.0)), dtype=tf.float64)
                 weights = tf.nn.softmax(U.dense(last_out, gmm_comp, "gmmweights", U.normc_initializer(0.01)))
                 pdparam = U.concatenate([means, means*0.0+logstd, weights], axis=1)
         elif gmm_comp == 1:

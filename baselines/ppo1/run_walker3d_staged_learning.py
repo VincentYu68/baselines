@@ -54,7 +54,7 @@ def train_mirror(env_id, num_timesteps, seed):
     previous_params = None
     iter_num = 0
     last_iter = False
-  
+
     # if initialize from previous runs
     '''previous_params = joblib.load('data/ppo_DartWalker3d-v111_energy04_vel1_1s_mirror4_velrew3_damping5_anklesprint100_5_rotpen1_rew01xinit_stagedcurriculum/policy_params.pkl')
     env.env.env.assist_schedule = [[0.0,np.array([250.,125.])],[3.0,np.array([125.,62.5])],[6.0,[62.5,31.25]]]'''
@@ -83,7 +83,7 @@ def train_mirror(env_id, num_timesteps, seed):
                 return_threshold=reward_threshold,
             )
         if iter_num == 0:
-            reward_threshold = 0.7 * rew
+            reward_threshold = 0.8 * rew
         if last_iter:
             reward_threshold = None
         iter_num += 1
@@ -123,7 +123,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy04_vel1_1s_mirror4_velrew3_ab4_anklesprint100_5_rotpen0_rew05xinit_stagedcurriculum4s75s34ratio')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel1_1s_mirror4_velrew3_ab4_anklesprint100_5_rotpen1_jumprew10')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

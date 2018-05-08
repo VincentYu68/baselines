@@ -1,5 +1,7 @@
 __author__ = 'yuwenhao'
 
+import matplotlib
+matplotlib.use('TkAgg')
 import gym
 from baselines.common import set_global_seeds, tf_util as U
 from baselines import bench
@@ -22,7 +24,7 @@ np.random.seed(1)
 
 def policy_fn(name, ob_space, ac_space):
     return mlp_split_policy.MlpSplitPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-                                hid_size=64, num_hid_layers=3, gmm_comp=1, obrms=False, final_std=1.0)
+                                hid_size=64, num_hid_layers=3, gmm_comp=1, obrms=True, final_std=1.0)
 
 def save_one_frame_shape(env, fpath, step):
     robo_skel = env.env.robot_skeleton
@@ -59,11 +61,11 @@ def save_one_frame_shape(env, fpath, step):
 
 
 if __name__ == '__main__':
-    save_render_data = False
+    save_render_data = True
     interpolate = 0
     prev_state = None
     render_step = 0
-    render_path = 'render_data/' + 'humanoid_walk222'
+    render_path = 'render_data/' + 'biped_walk'
     try:
         os.makedirs(render_path)
     except OSError as e:
@@ -140,7 +142,7 @@ if __name__ == '__main__':
 
     actions = []
 
-    traj = 30
+    traj = 1
     ct = 0
     vel_rew = []
     action_pen = []
@@ -163,7 +165,7 @@ if __name__ == '__main__':
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(True, o)
+            ac, vpred = policy.act(False, o)
             act = ac
         else:
             act = env.action_space.sample()
@@ -190,6 +192,8 @@ if __name__ == '__main__':
             ref_feat_rew.append(env_info['ref_feat_rew'])
         if 'avg_vel' in env_info:
             avg_vels.append(env_info['avg_vel'])
+
+
 
         com_z.append(o[1])
         foot_contacts.append(o[-2:])

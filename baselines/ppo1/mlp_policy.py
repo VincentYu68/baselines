@@ -38,9 +38,9 @@ class MlpPolicy(object):
             if gmm_comp == 1:
                 mean = U.dense(last_out, pdtype.param_shape()[0]//2, "polfinal", U.normc_initializer(1.0))
                 logstd = tf.get_variable(name="logstd", shape=[1, pdtype.param_shape()[0]//2], initializer=tf.zeros_initializer(), dtype=tf.float64)
-                pdparam = U.concatenate([mean, mean * 0.0 + logstd], axis=1)
+                pdparam = U.concatenate([mean, mean * 0.0 + logstd-0.5], axis=1)
             else:
-                means = U.dense(last_out, (pdtype.param_shape()[0] - gmm_comp)//2, "polfinal", U.normc_initializer(0.01))
+                means = U.dense(last_out, (pdtype.param_shape()[0] - gmm_comp)//2, "polfinal", U.normc_initializer(1.0))
                 logstd = tf.get_variable(name="logstd",
                                          initializer=tf.constant(np.ones((1, (pdtype.param_shape()[0] - gmm_comp)//2), dtype=np.float64)*(-1.0)))
                 weights = tf.nn.softmax(U.dense(last_out, gmm_comp, "gmmweights", U.normc_initializer(0.01)))

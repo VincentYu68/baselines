@@ -1,5 +1,7 @@
 __author__ = 'yuwenhao'
 
+import matplotlib
+matplotlib.use('TkAgg')
 import gym
 import sys, os, time
 

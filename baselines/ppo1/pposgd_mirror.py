@@ -145,8 +145,9 @@ def learn(env, policy_func, *,
     sym_loss = sym_loss_weight * U.mean(tf.square(pi.mean - pi.mirrored_mean))    # mirror symmetric loss
     ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac)) # pnew / pold
     surr1 = ratio * atarg # surrogate from conservative policy iteration
-    surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
+    surr2 = U.clip(ratio, 1.0 - 0.2, 1.0 + 0.4) * atarg #
     pol_surr = - U.mean(tf.minimum(surr1, surr2)) + sym_loss # PPO's pessimistic surrogate (L^CLIP)
+    pol_surr += U.mean(tf.abs(atarg)) * meankl * 0.1
 
     vf_loss = U.mean(tf.square(pi.vpred - ret))
     total_loss = pol_surr + pol_entpen + vf_loss
@@ -236,7 +237,7 @@ def learn(env, policy_func, *,
             rewbuffer.extend(rews)
             revert_iteration = False
             if np.mean(
-                    rewbuffer) < prev_avg_rew - 50:  # detect significant drop in performance, revert to previous iteration
+                    rewbuffer) < prev_avg_rew - reward_drop_bound:  # detect significant drop in performance, revert to previous iteration
                 print("Revert Iteration!!!!!")
                 revert_iteration = True
             else:

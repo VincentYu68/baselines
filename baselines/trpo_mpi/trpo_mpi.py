@@ -74,10 +74,16 @@ def add_vtarg_and_adv(seg, gamma, lam):
     seg["adv"] = gaelam = np.empty(T, 'float64')
     rew = seg["rew"]
     lastgaelam = 0
+
+    seg["tdlamret"] = np.empty(T, 'float64')
+    lastaccumret = 0
+
     for t in reversed(range(T)):
         nonterminal = 1-new[t+1]
         delta = rew[t] + gamma * vpred[t+1] * nonterminal - vpred[t]
         gaelam[t] = lastgaelam = delta + gamma * lam * nonterminal * lastgaelam
+
+        #seg["tdlamret"][t] = lastaccumret = rew[t] + gamma * nonterminal * lastaccumret
     seg["tdlamret"] = seg["adv"] + seg["vpred"]
 
 def learn(env, policy_fn, *,
@@ -86,8 +92,8 @@ def learn(env, policy_fn, *,
         gamma, lam, # advantage estimation
         entcoeff=0.0,
         cg_damping=1e-2,
-        vf_stepsize=0.0,
-        vf_iters =0,
+        vf_stepsize=3e-4,
+        vf_iters =3,
         max_timesteps=0, max_episodes=0, max_iters=0,  # time constraint
         callback=None
         ):
@@ -197,8 +203,8 @@ def learn(env, policy_fn, *,
                 U.get_session().run(assign_op)
         if 'logstd' in pi.get_variables()[p].name:
             assign_op = pi.get_variables()[p].assign(np.reshape(rllab_trained_params['output_log_std.param'], (1, len(rllab_trained_params['output_log_std.param']))))
-            U.get_session().run(assign_op)
-    ob = np.arange(21)
+            U.get_session().run(assign_op)'''
+    '''ob = np.arange(21)
     print(pi.act(False, ob))
 
     input_data = joblib.load('data/rllab_trained/input_data.pkl')
@@ -206,7 +212,8 @@ def learn(env, policy_fn, *,
     assign_old_eq_new()
 
     flat_pm = get_flat()
-    set_from_flat(flat_pm + 0.01)
+
+    print('before optimize: ', flat_pm)
 
     with timed("computegrad"):
         *lossbefore, g = compute_lossandgrad(input_data[0], input_data[1], input_data[2])
@@ -301,7 +308,7 @@ def learn(env, policy_fn, *,
     else:
         logger.log("couldn't compute a good step")
         set_from_flat(thbefore)
-    #print(stepsize, thnew)
+    print(stepsize, thnew)
     abc'''
 
     ############# test with rllab data
@@ -345,7 +352,7 @@ def learn(env, policy_fn, *,
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
 
-        if hasattr(pi, "ret_rms"): pi.ret_rms.update(tdlamret)
+        #if hasattr(pi, "ret_rms"): pi.ret_rms.update(tdlamret)
         if hasattr(pi, "ob_rms"): pi.ob_rms.update(ob) # update running mean/std for policy
 
         args = seg["ob"], seg["ac"], atarg
@@ -399,11 +406,10 @@ def learn(env, policy_fn, *,
             logger.record_tabular(lossname, lossval)
 
         with timed("vf"):
-
             for _ in range(vf_iters):
                 for (mbob, mbret) in dataset.iterbatches((seg["ob"], seg["tdlamret"]),
                 include_final_partial_batch=False, batch_size=64):
-                    g = allmean(compute_vflossandgrad(mbob, mbret))
+                    g = compute_vflossandgrad(mbob, mbret)
                     vfadam.update(g, vf_stepsize)
 
         logger.record_tabular("ev_tdlam_before", explained_variance(vpredbefore, tdlamret))

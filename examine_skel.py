@@ -6,6 +6,8 @@ import sys, os, time
 import joblib
 import numpy as np
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from gym import wrappers
 

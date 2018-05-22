@@ -78,7 +78,7 @@ def train_mirror(env_id, num_timesteps, seed):
                 sym_loss_weight=4.0,
                 positive_rew_enforce=False,
                 init_policy_params = previous_params,
-                reward_drop_bound=True,
+                reward_drop_bound=500,
                 rollout_length_thershold = rollout_length_thershold,
                 policy_scope='pi' + str(iter_num),
                 return_threshold = reward_threshold,
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03_vel15_1s_mirror4_velrew3_ab6_norotpen_dofpen11508_rew05xinit_thigh160_50springankle_1p2term_stagedcurriculum_075reduce_07rewthres_2kassist')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy035_vel15_1s_mirror4_velrew3_ab6_1p2term_stagedcurriculum_fullrotenabled_35waistdamping_150waisttorque_pushpelvisonly')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

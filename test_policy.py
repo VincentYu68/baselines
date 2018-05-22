@@ -1,7 +1,7 @@
 __author__ = 'yuwenhao'
 
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 import gym
 from baselines.common import set_global_seeds, tf_util as U
 from baselines import bench
@@ -61,7 +61,7 @@ def save_one_frame_shape(env, fpath, step):
 
 
 if __name__ == '__main__':
-    save_render_data = True
+    save_render_data = False
     interpolate = 0
     prev_state = None
     render_step = 0
@@ -221,7 +221,7 @@ if __name__ == '__main__':
             render_step += 1
             prev_state = env.env.state_vector()
 
-        if d:
+        '''if d:
             step = 0
             if 'contact_locations' in env_info:
                 c_loc = env_info['contact_locations']
@@ -231,9 +231,10 @@ if __name__ == '__main__':
                     c_loc[1][j] = c_loc[1][j + 1] - c_loc[1][j]
                 print(np.mean(c_loc[0][0:-1], axis=0))
                 print(np.mean(c_loc[1][0:-1], axis=0))
+            print('mean action size: ', np.mean(np.abs(actions)))
             ct += 1
             print('reward: ', rew)
-            o=env_wrapper.reset()
+            o=env_wrapper.reset()'''
             #break
     print('avg rew ', rew / traj)
     print('total energy penalty: ', np.sum(action_pen)/traj)
@@ -322,9 +323,9 @@ if __name__ == '__main__':
 
 
     ################ save average action signals #################
-    avg_action = np.mean(np.abs(actions), axis=1)
-    np.savetxt('data/force_data/action_mean.txt', avg_action)
-    np.savetxt('data/force_data/action_std.txt', np.std(np.abs(actions), axis=1))
+    #avg_action = np.mean(np.abs(actions), axis=1)
+    #np.savetxt('data/force_data/action_mean.txt', avg_action)
+    #np.savetxt('data/force_data/action_std.txt', np.std(np.abs(actions), axis=1))
 
     plt.show()
 

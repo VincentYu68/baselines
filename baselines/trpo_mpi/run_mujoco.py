@@ -24,19 +24,19 @@ def train(env_id, num_timesteps, seed):
     env = bench.Monitor(env, logger.get_dir() and
                         osp.join(logger.get_dir(), "%i.monitor.json" % rank))
     env.seed(workerseed)
-    trpo_mpi.learn(env, policy_fn, timesteps_per_batch=2000, max_kl=0.01, cg_iters=10, cg_damping=1e-5,
-        max_timesteps=num_timesteps, gamma=0.99, lam=0.98, vf_iters=15, vf_stepsize=4e-4)
+    trpo_mpi.learn(env, policy_fn, timesteps_per_batch=6000, max_kl=0.01, cg_iters=10, cg_damping=0.001,
+        max_timesteps=num_timesteps, gamma=0.99, lam=0.95, vf_iters=10, vf_stepsize=1e-3)
     env.close()
 
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='Hopper-v1')
+    parser.add_argument('--env', help='environment ID', default='DartReacher3d-v1')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('trpo8000_fixed_allmatch_' + args.env + str(args.seed))
-    train(args.env, num_timesteps=3000000, seed=args.seed)
+    logger.configure('trpo25k_fixed_allmatch_' + args.env + str(args.seed))
+    train(args.env, num_timesteps=4800000, seed=args.seed)
 
 
 if __name__ == '__main__':

@@ -349,6 +349,8 @@ def learn(env, policy_func, *,
         if rollout_length_thershold is not None or return_threshold is not None:
             if rollout_length_thershold_satisfied and return_threshold_satisfied:
                 break
+        if iters_so_far == 50:
+            env.env.env.energy_weight *= 1.5
 
     return pi, np.mean(rewbuffer)
 

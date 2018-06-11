@@ -29,17 +29,17 @@ def train(env_id, num_timesteps, seed):
     env = gym.make(env_id)
     def policy_fn(name, ob_space, ac_space):
         return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
-            hid_size=64, num_hid_layers=3, gmm_comp=1)
+            hid_size=64, num_hid_layers=3)
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), "monitor.json"))
     env.seed(seed+MPI.COMM_WORLD.Get_rank())
     gym.logger.setLevel(logging.WARN)
     pposgd_simple.learn(env, policy_fn,
             max_timesteps=num_timesteps,
-            timesteps_per_batch=int(2000),
+            timesteps_per_batch=int(2500),
             clip_param=0.2, entcoeff=0.0,
-            optim_epochs=20, optim_stepsize=3e-4, optim_batchsize=64,
-            gamma=0.99, lam=0.95, schedule='linear',
+            optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
+            gamma=0.99, lam=0.95, schedule='constant',
                         callback=callback
         )
     env.close()
@@ -52,7 +52,7 @@ def main():
     args = parser.parse_args()
     logger.reset()
     logger.configure('data/ppo_'+args.env+str(args.seed)+'_jump')
-    train(args.env, num_timesteps=int(200*10000), seed=args.seed)
+    train(args.env, num_timesteps=int(500*10000), seed=args.seed)
 
 if __name__ == '__main__':
     main()

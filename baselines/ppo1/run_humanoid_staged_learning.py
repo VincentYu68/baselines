@@ -70,7 +70,7 @@ def train_mirror(env_id, num_timesteps, seed):
             rollout_length_thershold = None
         opt_pi, rew = pposgd_mirror.learn(env, policy_fn,
                 max_timesteps=num_timesteps,
-                timesteps_per_batch=int(2500),
+                timesteps_per_batch=int(4000),
                 clip_param=0.2, entcoeff=0.0,
                 optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64,
                 gamma=0.99, lam=0.95, schedule='linear',
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     args = parser.parse_args()
     logger.reset()
-    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy035_vel15_1s_mirror4_velrew3_ab6_1p2term_stagedcurriculum_fullrotenabled_35waistdamping_150waisttorque_pushpelvisonly')
+    logger.configure('data/ppo_'+args.env+str(args.seed)+'_energy03stage50scale15_vel12_1s_mirror4_velrew35_ab7_1p2term_stagedcurriculum_fullrotenabled_150waisttorque_thigh200torque_pushpelvisthorax_jabddamp_35_10_10_spinepen160105_160501_thighdamp15_ankledamp8torque80_02inner_armdamp3')
     train_mirror(args.env, num_timesteps=int(5000*4*800), seed=args.seed)
 
 

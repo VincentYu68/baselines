@@ -165,7 +165,7 @@ if __name__ == '__main__':
 
     while ct < traj:
         if policy is not None:
-            ac, vpred = policy.act(False, o)
+            ac, vpred = policy.act(step<100, o)
             act = ac
         else:
             act = env.action_space.sample()
@@ -221,7 +221,7 @@ if __name__ == '__main__':
             render_step += 1
             prev_state = env.env.state_vector()
 
-        '''if d:
+        if d:
             step = 0
             if 'contact_locations' in env_info:
                 c_loc = env_info['contact_locations']
@@ -234,7 +234,7 @@ if __name__ == '__main__':
             print('mean action size: ', np.mean(np.abs(actions)))
             ct += 1
             print('reward: ', rew)
-            o=env_wrapper.reset()'''
+            o=env_wrapper.reset()
             #break
     print('avg rew ', rew / traj)
     print('total energy penalty: ', np.sum(action_pen)/traj)

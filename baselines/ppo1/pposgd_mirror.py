@@ -321,6 +321,8 @@ def learn(env, policy_func, *,
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
         logger.record_tabular("TimestepsSoFar", timesteps_so_far)
         logger.record_tabular("TimeElapsed", time.time() - tstart)
+        logger.record_tabular("Energy_weight", env.env.env.energy_weight)
+        logger.record_tabular("Alive_bonus", env.env.env.alive_bonus_rew)
         logger.record_tabular("Iter", iters_so_far)
         if positive_rew_enforce:
             if adjust_ratio is not None:
@@ -349,8 +351,9 @@ def learn(env, policy_func, *,
         if rollout_length_thershold is not None or return_threshold is not None:
             if rollout_length_thershold_satisfied and return_threshold_satisfied:
                 break
-        if iters_so_far == 50:
+        if iters_so_far == 50 and policy_scope == 'pi0':
             env.env.env.energy_weight *= 1.5
+            env.env.env.alive_bonus_rew -= 2.0
 
     return pi, np.mean(rewbuffer)
 
